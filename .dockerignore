@@ -1,0 +1,12 @@
+.git
+.github
+.vscode
+assets
+dist
+tests
+videos
+audio
+pdf
+config
+**/__pycache__
+**/*.md

@@ -92,6 +92,9 @@
         { mime: 'audio/m4a',        extensions: ['m4a'] },
         { mime: 'audio/mp4',        extensions: ['m4a'] },
         { mime: 'audio/ogg',        extensions: ['ogg'] },
+        { mime: 'audio/ogg; codecs=opus', extensions: ['opus'] },
+        { mime: 'audio/flac',       extensions: ['flac'] },
+        { mime: 'audio/x-flac',     extensions: ['flac'] },
         { mime: 'audio/x-matroska', extensions: ['mka'] },
         { mime: 'audio/matroska',   extensions: ['mka'] }
       ];
@@ -280,13 +283,22 @@
     };
 
     const isAudio = (url) => {
-      const re = /(?:\/)((?:[^/])+\.(?:wav|mp3|aac|m4a|mka|ogg))/gi
+      const re = /(?:\/)((?:[^/])+\.(?:wav|mp3|aac|m4a|mka|ogg|opus|flac))/gi
       return re.test(url);
     }
 
     const isImage = (url) => {
       const re = /(?:\/)((?:[^/])+\.(?:png|jpeg|jpg|gif|webp))/gi
       return re.test(url);
+    }
+
+    const documentExtensions = ['pdf', 'txt', 'html', 'htm', 'xhtml'];
+    // Opened by the browser's own viewer, so `local://` session URLs cannot be used.
+    const isDocument = (url) => {
+      const cleanUrl = String(url || '').split('#')[0].split('?')[0];
+      const re = new RegExp(`\\.(${documentExtensions.join('|')})$`, 'i');
+      if (!re.test(cleanUrl) || isLocalUrl(cleanUrl)) return false;
+      return resolveUrl(cleanUrl) !== `${window.location.origin}${window.location.pathname}`;
     }
 
     const linksHash = (links) => {
@@ -572,7 +584,7 @@
 
     const getSearchCacheKey = (rootUrl = getSearchRootUrl(), depth = getSearchDepth()) => {
       if (!rootUrl) return '';
-      const extensions = [...new Set(app.options.supportedTypes.extensions)].sort().join(',');
+      const extensions = [...new Set([...app.options.supportedTypes.extensions, ...documentExtensions])].sort().join(',');
       return `${searchIndexSessionPrefix}${base64EncodeUTF(`${rootUrl}|${depth}|${extensions}`)}`;
     }
 
@@ -731,7 +743,7 @@
       return items
         .filter((file) => file?.url && (folders
           ? file.url !== rootUrl && (file.role || file.type) !== 'parent' && isUrlWithinRoot(file.url, rootUrl)
-          : isMedia(file.url)))
+          : isMedia(file.url) || isDocument(file.url)))
         .map((file) => {
           const url = resolveUrl(file.url);
           let fallbackName = urlToFilename(url);
@@ -1116,6 +1128,7 @@
     }
 
     const matchesLibraryFilters = (file) => {
+      if (isDocument(file.url)) return libraryState.type === 'all' && libraryState.status === 'all';
       if (libraryState.type === 'audio' && !isAudio(file.url)) return false;
       if (libraryState.type === 'video' && isAudio(file.url)) return false;
       const record = file.watchRecord;
@@ -1202,7 +1215,7 @@
       const sourceFiles = Array.isArray(links.files) ? links.files : [];
       const root = getHashRootLocation() || urlToFolder(hashState.location || window.location.href);
       const searching = !!searchState.query.trim();
-      let files = searching && searchState.indexed ? getSearchMatches(searchState.query) : sourceFiles.filter((file) => isMedia(file.url));
+      let files = searching && searchState.indexed ? getSearchMatches(searchState.query) : sourceFiles.filter((file) => isMedia(file.url) || isDocument(file.url));
       await prepareLocalFileMetadata(files);
       const history = await getLibraryHistory();
       const records = new Map(history.map((record) => [record.id, record]));
@@ -1246,7 +1259,7 @@
         return url && isLocalUrl(url) ? getPlayableUrlForMedia(url).catch(() => '') : (url || '');
       }));
       if (requestId !== libraryRenderRequestId) return;
-      const entries = [...folders.map((file) => ({ file, folder: true })), ...files.map((file, index) => ({ file, image: images[index] }))];
+      const entries = [...folders.map((file) => ({ file, folder: true })), ...files.map((file, index) => ({ file, image: images[index], document: isDocument(file.url) }))];
       const visibleUrls = new Set(entries.map((entry) => entry.file.url));
       const focused = $links.contains(document.activeElement) ? document.activeElement : null;
       for (const [url, node] of libraryState.nodes) node.hidden = !visibleUrls.has(url);
@@ -1260,15 +1273,25 @@
         }
         if (!node) {
           const label = searching || libraryState.mode === 'continue' ? getSearchRelativeLabel(file.url, root) : urlToLabel(file.url);
-          node = $(entry.folder
-            ? createFolderTemplate(file.url, file.name || label, parent ? 'parent' : '')
-            : createFileTemplate(file.url, label));
-          node.on('click', clickLink);
+          if (entry.document) {
+            node = $(createDocumentTemplate(file.url, label));
+          } else {
+            node = $(entry.folder
+              ? createFolderTemplate(file.url, file.name || label, parent ? 'parent' : '')
+              : createFileTemplate(file.url, label));
+            node.on('click', clickLink);
+          }
           libraryState.nodes.set(file.url, node);
         }
         node.hidden = false;
         if (entry.folder) {
           node.querySelector('.label').textContent = parent ? t('library.parent') : (searching ? getSearchRelativeLabel(file.url, root) : (file.name || urlToLabel(file.url)));
+        } else if (entry.document) {
+          if (entry.image) {
+            node.style.setProperty('--image-url-0', `url('${escapeCssUrl(entry.image)}')`);
+            node.classList.add('prerendered');
+          }
+          node.querySelector('.label').textContent = searching ? getSearchRelativeLabel(file.url, root) : urlToLabel(file.url);
         } else {
           const record = file.watchRecord;
           node.classList.toggle('current', file.url === getMediaUrl());
@@ -1389,6 +1412,21 @@
                 <div class='arrow' draggable='false'>
                   <svg class='open'><use xlink:href='#svg-folder-open'/></svg>
                   <svg class='closed'><use xlink:href='#svg-folder-closed'/></svg>
+                </div>
+              </a>`;
+    }
+
+    const createDocumentTemplate = (url, label) => {
+      const escapedUrl = escapeAttr(url);
+      const safeLabel = escapeHtml(label);
+      const safeTitle = escapeAttr(t('ui.open'));
+
+      return `<a href='${escapedUrl}' class='document' target='_blank' rel='noopener' data-i18n-title='ui.open' title='${safeTitle}' draggable='false'>
+                <div class='title' draggable='false'>
+                  <span class='file-label'><span class='label' dir='auto'>${safeLabel}</span></span>
+                </div>
+                <div class='arrow' draggable='false'>
+                  <svg><use xlink:href='#svg-document'/></svg>
                 </div>
               </a>`;
     }
@@ -4762,7 +4800,9 @@
     };
 
     const actionOpenLocalFileFallback = () => {
-      const supportedTypes = app.options.supportedTypes.mime.join(',');
+      // `accept` does not match MIME parameters such as `codecs=opus`, so list base types and extensions.
+      const { mime, extensions } = app.options.supportedTypes;
+      const supportedTypes = [...new Set([...mime.map((type) => type.split(';')[0].trim()), ...extensions.map((ext) => `.${ext}`)])].join(',');
       const $input = $(`<input type="file" accept="${supportedTypes}"/>`);
       $input.on('change', () => playFile($input.files[0]));
       $input.click();

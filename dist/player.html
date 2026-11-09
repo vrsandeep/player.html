@@ -1953,7 +1953,8 @@
     }
 
     .folder .arrow,
-    .file .arrow {
+    .file .arrow,
+    .document .arrow {
       /* Arrow */
       display: flex;
       justify-content: center;
@@ -1962,10 +1963,11 @@
       padding: 0;
     }
 
-    .file .arrow { filter: drop-shadow(0 0 0.1rem rgba(0, 0, 0, 0.5)); }
+    .file .arrow, .document .arrow { filter: drop-shadow(0 0 0.1rem rgba(0, 0, 0, 0.5)); }
 
     .file:hover .arrow svg,
     .folder:hover .arrow svg,
+    .document:hover .arrow svg,
     .file.current .arrow svg {
       transform: rotate(360deg);
       width: var(--tile-arrow-size-active);
@@ -1977,16 +1979,17 @@
       .library-tab { font-size: 1.1rem; }
     }
 
-    .file .arrow svg, .folder .arrow svg {
+    .file .arrow svg, .folder .arrow svg, .document .arrow svg {
       width: var(--tile-arrow-size);
       height: auto;
       flex: 0 0 auto;
     }
 
-    .file svg, .folder svg {
+    .file svg, .folder svg, .document svg {
       transition: none;
     }
-    .file svg { fill: var(--color-text-overlay); }
+    .file svg, .document svg { fill: var(--color-text-overlay); }
+    .document:hover .arrow svg { fill: var(--accent); }
     .folder svg { fill: hsl(44, 100%, 68%); }
     .folder .btn-add-to-playlist svg { fill: var(--color-text-overlay); }
 
@@ -2069,7 +2072,7 @@
     .links.list-view .label { line-height: 1.6; overflow-wrap: anywhere; }
     .links.list-view .title .watched-icon { display: none; }
     .links.list-view .btn-add-to-playlist { grid-column: 2; justify-self: center; justify-content: center; }
-    .links.list-view .file svg, .links.list-view .btn-add-to-playlist svg { fill: currentColor; }
+    .links.list-view .file svg, .links.list-view .document svg, .links.list-view .btn-add-to-playlist svg { fill: currentColor; }
     .links.list-view .btn-add-to-playlist:hover svg,
     .links.list-view .btn-add-to-playlist:focus-visible svg { fill: var(--accent); }
     .links.list-view .file-resume:not(:empty) { display: block; color: var(--color-text-muted); font-size: 1rem; line-height: 1.5; }
@@ -2345,6 +2348,8 @@
 <svg id='svg-dismiss-circle' viewBox='0 0 24 24'><path d='M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM15.5303 8.46967L15.4462 8.39705C15.1852 8.2034 14.827 8.20101 14.5636 8.38988L14.4697 8.46967L12 10.939L9.53033 8.46967L9.44621 8.39705C9.18522 8.2034 8.82701 8.20101 8.56362 8.38988L8.46967 8.46967L8.39705 8.55379C8.2034 8.81478 8.20101 9.17299 8.38988 9.43638L8.46967 9.53033L10.939 12L8.46967 14.4697L8.39705 14.5538C8.2034 14.8148 8.20101 15.173 8.38988 15.4364L8.46967 15.5303L8.55379 15.6029C8.81478 15.7966 9.17299 15.799 9.43638 15.6101L9.53033 15.5303L12 13.061L14.4697 15.5303L14.5538 15.6029C14.8148 15.7966 15.173 15.799 15.4364 15.6101L15.5303 15.5303L15.6029 15.4462C15.7966 15.1852 15.799 14.827 15.6101 14.5636L15.5303 14.4697L13.061 12L15.5303 9.53033L15.6029 9.44621C15.7966 9.18522 15.799 8.82701 15.6101 8.56362L15.5303 8.46967L15.4462 8.39705L15.5303 8.46967Z'/></svg>
 <!-- ic_fluent_document_arrow_down_24_filled.svg -->
 <svg id='svg-document-download' viewBox="0 0 24 24"><path d="M12 2V8C12 9.10457 12.8954 10 14 10H20V20C20 21.1046 19.1046 22 18 22H11.1904C12.3112 20.8321 13 19.2465 13 17.5C13 13.9101 10.0899 11 6.5 11C5.6141 11 4.76959 11.1772 4 11.4982V4C4 2.89543 4.89543 2 6 2H12ZM13.5 2.5V8C13.5 8.27614 13.7239 8.5 14 8.5H19.5L13.5 2.5ZM12 17.5C12 20.5376 9.53757 23 6.5 23C3.46243 23 1 20.5376 1 17.5C1 14.4624 3.46243 12 6.5 12C9.53757 12 12 14.4624 12 17.5ZM7 14.5C7 14.2239 6.77614 14 6.5 14C6.22386 14 6 14.2239 6 14.5V19.2929L4.35355 17.6464C4.15829 17.4512 3.84171 17.4512 3.64645 17.6464C3.45118 17.8417 3.45118 18.1583 3.64645 18.3536L6.14645 20.8536C6.34171 21.0488 6.65829 21.0488 6.85355 20.8536L9.35355 18.3536C9.54882 18.1583 9.54882 17.8417 9.35355 17.6464C9.15829 17.4512 8.84171 17.4512 8.64645 17.6464L7 19.2929V14.5Z"/></svg>
+<!-- ic_fluent_document_24_filled.svg -->
+<svg id='svg-document' viewBox="0 0 24 24"><path d="M12 2V8C12 9.10457 12.8954 10 14 10H20V20C20 21.1046 19.1046 22 18 22H6C4.89543 22 4 21.1046 4 20V4C4 2.89543 4.89543 2 6 2H12ZM13.5 2.5V8C13.5 8.27614 13.7239 8.5 14 8.5H19.5L13.5 2.5Z"/></svg>
 <!-- ic_fluent_arrow_download_24_filled.svg -->
 <svg id='svg-download' viewBox="0 0 24 24"><path d="M13 3C13 2.44772 12.5523 2 12 2C11.4477 2 11 2.44772 11 3V15.0858L7.70711 11.7929C7.31658 11.4024 6.68342 11.4024 6.29289 11.7929C5.90237 12.1834 5.90237 12.8166 6.29289 13.2071L11.2929 18.2071C11.6834 18.5976 12.3166 18.5976 12.7071 18.2071L17.7071 13.2071C18.0976 12.8166 18.0976 12.1834 17.7071 11.7929C17.3166 11.4024 16.6834 11.4024 16.2929 11.7929L13 15.0858V3ZM5 20C4.44772 20 4 20.4477 4 21C4 21.5523 4.44772 22 5 22H19C19.5523 22 20 21.5523 20 21C20 20.4477 19.5523 20 19 20H5Z"/></svg>
 <!-- ic_fluent_arrow_expand_24_filled.svg -->
@@ -2963,7 +2968,7 @@ global.addEventListener('languagechange', () => { if (preference === 'auto') set
           {
             action: startUrl,
             accept: {
-              "audio/*": [".mp3", ".wav", ".aac", ".m4a", ".mka", ".ogg"],
+              "audio/*": [".mp3", ".wav", ".aac", ".m4a", ".mka", ".ogg", ".opus", ".flac"],
               "video/*": [".mp4", ".mov", ".webm", ".mkv"]
             }
           }
@@ -5355,7 +5360,7 @@ const fetchBytes = async (url, opts) => {
           advanced: {
             queryParameters:
               'select=id,name,size,file,audio,video,@microsoft.graph.downloadUrl',
-            filter: 'mp4,webm,mkv,wav,mp3,aac,m4a,ogg',
+            filter: 'mp4,webm,mkv,wav,mp3,aac,m4a,ogg,opus,flac',
             navigation: {
               sourceTypes: ['OneDrive', 'Sites', 'Recent']
             },
@@ -6609,6 +6614,9 @@ export {
         { mime: 'audio/m4a',        extensions: ['m4a'] },
         { mime: 'audio/mp4',        extensions: ['m4a'] },
         { mime: 'audio/ogg',        extensions: ['ogg'] },
+        { mime: 'audio/ogg; codecs=opus', extensions: ['opus'] },
+        { mime: 'audio/flac',       extensions: ['flac'] },
+        { mime: 'audio/x-flac',     extensions: ['flac'] },
         { mime: 'audio/x-matroska', extensions: ['mka'] },
         { mime: 'audio/matroska',   extensions: ['mka'] }
       ];
@@ -6797,13 +6805,22 @@ export {
     };
 
     const isAudio = (url) => {
-      const re = /(?:\/)((?:[^/])+\.(?:wav|mp3|aac|m4a|mka|ogg))/gi
+      const re = /(?:\/)((?:[^/])+\.(?:wav|mp3|aac|m4a|mka|ogg|opus|flac))/gi
       return re.test(url);
     }
 
     const isImage = (url) => {
       const re = /(?:\/)((?:[^/])+\.(?:png|jpeg|jpg|gif|webp))/gi
       return re.test(url);
+    }
+
+    const documentExtensions = ['pdf', 'txt', 'html', 'htm', 'xhtml'];
+    // Opened by the browser's own viewer, so `local://` session URLs cannot be used.
+    const isDocument = (url) => {
+      const cleanUrl = String(url || '').split('#')[0].split('?')[0];
+      const re = new RegExp(`\\.(${documentExtensions.join('|')})$`, 'i');
+      if (!re.test(cleanUrl) || isLocalUrl(cleanUrl)) return false;
+      return resolveUrl(cleanUrl) !== `${window.location.origin}${window.location.pathname}`;
     }
 
     const linksHash = (links) => {
@@ -7089,7 +7106,7 @@ export {
 
     const getSearchCacheKey = (rootUrl = getSearchRootUrl(), depth = getSearchDepth()) => {
       if (!rootUrl) return '';
-      const extensions = [...new Set(app.options.supportedTypes.extensions)].sort().join(',');
+      const extensions = [...new Set([...app.options.supportedTypes.extensions, ...documentExtensions])].sort().join(',');
       return `${searchIndexSessionPrefix}${base64EncodeUTF(`${rootUrl}|${depth}|${extensions}`)}`;
     }
 
@@ -7248,7 +7265,7 @@ export {
       return items
         .filter((file) => file?.url && (folders
           ? file.url !== rootUrl && (file.role || file.type) !== 'parent' && isUrlWithinRoot(file.url, rootUrl)
-          : isMedia(file.url)))
+          : isMedia(file.url) || isDocument(file.url)))
         .map((file) => {
           const url = resolveUrl(file.url);
           let fallbackName = urlToFilename(url);
@@ -7633,6 +7650,7 @@ export {
     }
 
     const matchesLibraryFilters = (file) => {
+      if (isDocument(file.url)) return libraryState.type === 'all' && libraryState.status === 'all';
       if (libraryState.type === 'audio' && !isAudio(file.url)) return false;
       if (libraryState.type === 'video' && isAudio(file.url)) return false;
       const record = file.watchRecord;
@@ -7719,7 +7737,7 @@ export {
       const sourceFiles = Array.isArray(links.files) ? links.files : [];
       const root = getHashRootLocation() || urlToFolder(hashState.location || window.location.href);
       const searching = !!searchState.query.trim();
-      let files = searching && searchState.indexed ? getSearchMatches(searchState.query) : sourceFiles.filter((file) => isMedia(file.url));
+      let files = searching && searchState.indexed ? getSearchMatches(searchState.query) : sourceFiles.filter((file) => isMedia(file.url) || isDocument(file.url));
       await prepareLocalFileMetadata(files);
       const history = await getLibraryHistory();
       const records = new Map(history.map((record) => [record.id, record]));
@@ -7763,7 +7781,7 @@ export {
         return url && isLocalUrl(url) ? getPlayableUrlForMedia(url).catch(() => '') : (url || '');
       }));
       if (requestId !== libraryRenderRequestId) return;
-      const entries = [...folders.map((file) => ({ file, folder: true })), ...files.map((file, index) => ({ file, image: images[index] }))];
+      const entries = [...folders.map((file) => ({ file, folder: true })), ...files.map((file, index) => ({ file, image: images[index], document: isDocument(file.url) }))];
       const visibleUrls = new Set(entries.map((entry) => entry.file.url));
       const focused = $links.contains(document.activeElement) ? document.activeElement : null;
       for (const [url, node] of libraryState.nodes) node.hidden = !visibleUrls.has(url);
@@ -7777,15 +7795,25 @@ export {
         }
         if (!node) {
           const label = searching || libraryState.mode === 'continue' ? getSearchRelativeLabel(file.url, root) : urlToLabel(file.url);
-          node = $(entry.folder
-            ? createFolderTemplate(file.url, file.name || label, parent ? 'parent' : '')
-            : createFileTemplate(file.url, label));
-          node.on('click', clickLink);
+          if (entry.document) {
+            node = $(createDocumentTemplate(file.url, label));
+          } else {
+            node = $(entry.folder
+              ? createFolderTemplate(file.url, file.name || label, parent ? 'parent' : '')
+              : createFileTemplate(file.url, label));
+            node.on('click', clickLink);
+          }
           libraryState.nodes.set(file.url, node);
         }
         node.hidden = false;
         if (entry.folder) {
           node.querySelector('.label').textContent = parent ? t('library.parent') : (searching ? getSearchRelativeLabel(file.url, root) : (file.name || urlToLabel(file.url)));
+        } else if (entry.document) {
+          if (entry.image) {
+            node.style.setProperty('--image-url-0', `url('${escapeCssUrl(entry.image)}')`);
+            node.classList.add('prerendered');
+          }
+          node.querySelector('.label').textContent = searching ? getSearchRelativeLabel(file.url, root) : urlToLabel(file.url);
         } else {
           const record = file.watchRecord;
           node.classList.toggle('current', file.url === getMediaUrl());
@@ -7906,6 +7934,21 @@ export {
                 <div class='arrow' draggable='false'>
                   <svg class='open'><use xlink:href='#svg-folder-open'/></svg>
                   <svg class='closed'><use xlink:href='#svg-folder-closed'/></svg>
+                </div>
+              </a>`;
+    }
+
+    const createDocumentTemplate = (url, label) => {
+      const escapedUrl = escapeAttr(url);
+      const safeLabel = escapeHtml(label);
+      const safeTitle = escapeAttr(t('ui.open'));
+
+      return `<a href='${escapedUrl}' class='document' target='_blank' rel='noopener' data-i18n-title='ui.open' title='${safeTitle}' draggable='false'>
+                <div class='title' draggable='false'>
+                  <span class='file-label'><span class='label' dir='auto'>${safeLabel}</span></span>
+                </div>
+                <div class='arrow' draggable='false'>
+                  <svg><use xlink:href='#svg-document'/></svg>
                 </div>
               </a>`;
     }
@@ -11279,7 +11322,9 @@ export {
     };
 
     const actionOpenLocalFileFallback = () => {
-      const supportedTypes = app.options.supportedTypes.mime.join(',');
+      // `accept` does not match MIME parameters such as `codecs=opus`, so list base types and extensions.
+      const { mime, extensions } = app.options.supportedTypes;
+      const supportedTypes = [...new Set([...mime.map((type) => type.split(';')[0].trim()), ...extensions.map((ext) => `.${ext}`)])].join(',');
       const $input = $(`<input type="file" accept="${supportedTypes}"/>`);
       $input.on('change', () => playFile($input.files[0]));
       $input.click();
