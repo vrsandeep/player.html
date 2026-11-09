@@ -75,7 +75,7 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
       return getAll.apply(this, args);
     };
   }, { records, origin });
-  const exports = 'window.__playerTest = { libraryState, hashState, settings, searchState, openLocation, refreshSearchIndex, registerLocalFolder, createLocalLinks, getLocalSession, localObjectUrls, localObjectUrlMetadata, getWatchHistoryRecords, getWatchHistoryId, getLocalFileHistoryId, sanitizeRestoredHash, requestFolderLinks, addFolderToPlaylist, setPlaylistFromUrls, playPlaylistIndex, getMediaUrl, renderLibraryView, putThumbnailCacheRecord, readThumbnailCache, applyThumbnailCacheItems, pruneThumbnailCache, runThumbnailCacheStore, idbRequest, getThumbnailCacheKey, populateThumbnails, writeWatchHistory }; Promise.resolve(window.__seedHistory).then(main);';
+  const exports = 'window.__playerTest = { libraryState, hashState, settings, searchState, openLocation, refreshSearchIndex, registerLocalFolder, createLocalLinks, getLocalSession, localObjectUrls, localObjectUrlMetadata, getWatchHistoryRecords, getWatchHistoryId, getLocalFileHistoryId, sanitizeRestoredHash, requestFolderLinks, addFolderToPlaylist, setPlaylistFromUrls, playPlaylistIndex, getMediaUrl, renderLibraryView, putThumbnailCacheRecord, readThumbnailCache, applyThumbnailCacheItems, pruneThumbnailCache, runThumbnailCacheStore, idbRequest, getThumbnailCacheKey, populateThumbnails, writeWatchHistory, actionOpenLocalFileFallback }; Promise.resolve(window.__seedHistory).then(main);';
   const html = fs.readFileSync(path.join(project, 'dist', variant), 'utf8').replace(/\bmain\(\);(?=\s*<\/script>)/, exports);
   assert.ok(html.includes('window.__playerTest ='), 'Test instrumentation must match the built app');
   await context.route('**/*', async route => {
@@ -87,6 +87,10 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
     if (url.pathname === '/media/Other/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Other/', [['Only audio.mp3', '2026-10-18 12:00', '5M']]) });
     if (url.pathname === '/media/Sub/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Sub/', [['Nested/', '-', '-'], ['Child.webm', '2026-10-18 12:00', '40M']]) });
     if (url.pathname === '/media/Sub/Nested/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Sub/Nested/', [['Deep.webm', '-', '50M']]) });
+    if (url.pathname === '/media/Docs/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Docs/', [['../', '-', '-'], ['Guide.pdf', '2026-10-17 12:00', '1M'], ['Guide.jpg', '-', '-'], ['Notes.txt', '-', '1K'], ['Page.html', '-', '2K'], ['Page.htm', '-', '2K'], ['Page.xhtml', '-', '2K'], ['Clip.webm', '2026-10-16 12:00', '2M']]) });
+    if (url.pathname === '/media/Docs/Guide.pdf') return route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n%%EOF\n' });
+    if (url.pathname === '/media/Lossless/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Lossless/', [['../', '-', '-'], ['Track.flac', '-', '30M'], ['Voice.opus', '-', '2M'], ['Song.mp3', '-', '5M']]) });
+    if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: listing('/', [['media/', '-', '-'], ['player.html', '-', '1M'], ['Readme.txt', '-', '1K']]) });
     if (/\.(webm|mp3)$/.test(url.pathname)) mediaRequests.push(url.pathname);
     return route.fulfill({ status: 404, body: 'Not found' });
   });
@@ -540,6 +544,75 @@ test('directory metadata excludes filenames and does not invent missing sizes or
   assert.ok(Object.values(metadata).every(result => result.heads === 0));
 });
 
+test('PDF, text, and HTML tiles open in a new browser tab without touching playback or the queue', async t => {
+  const names = ['Guide.pdf', 'Notes.txt', 'Page.htm', 'Page.html', 'Page.xhtml'];
+  for (const variant of ['player.html', 'player.min.html']) {
+    const { page, context } = await openPlayer(t, [], variant);
+    assert.equal(await page.evaluate(() => __playerTest.openLocation('/media/Docs/', { playMedia: false })), true);
+    const $documents = page.locator('.document:not([hidden])');
+    await page.waitForFunction(count => document.querySelectorAll('.document:not([hidden])').length === count, names.length);
+    assert.deepEqual(await $documents.locator('.label').allTextContents(), names);
+    assert.deepEqual(await $documents.evaluateAll(els => els.map(el => el.getAttribute('href'))), names.map(name => `${root}Docs/${name}`));
+    assert.deepEqual(await $documents.evaluateAll(els => [...new Set(els.map(el => el.target))]), ['_blank']);
+    assert.deepEqual(await $documents.evaluateAll(els => els.filter(el => el.classList.contains('prerendered')).map(el => el.textContent.trim())), ['Guide.pdf']);
+    assert.equal(await $documents.locator('.btn-add-to-playlist').count(), 0);
+    assert.deepEqual(await visibleNames(page), ['Clip']);
+
+    const queue = await page.evaluate(() => app.playlist.map(item => item.url));
+    for (const [index, name] of names.entries()) {
+      const [popup, request] = await Promise.all([
+        context.waitForEvent('page'),
+        context.waitForEvent('request', req => req.url() === `${root}Docs/${name}`),
+        $documents.nth(index).locator('.label').click()
+      ]);
+      assert.equal(request.frame().page(), popup, name);
+      await popup.close();
+    }
+    assert.equal(await page.evaluate(() => __playerTest.getMediaUrl()), '');
+    assert.deepEqual(await page.evaluate(() => app.playlist.map(item => item.url)), queue);
+
+    for (const [type, status, shown] of [['video', 'all', 0], ['audio', 'all', 0], ['all', 'unplayed', 0], ['all', 'all', names.length]]) {
+      await page.selectOption('.library-type', type);
+      await page.selectOption('.library-status', status);
+      await page.waitForFunction(count => document.querySelectorAll('.document:not([hidden])').length === count, shown);
+    }
+    await page.locator('.library-view-list').click();
+    assert.equal(await $documents.first().isVisible(), true);
+    await page.locator('.library-view-tiles').click();
+  }
+});
+
+test('FLAC and Opus files are listed and filtered as audio', async t => {
+  const { page } = await openPlayer(t);
+  assert.deepEqual(await page.evaluate(() => ['flac', 'opus'].filter(ext => app.options.supportedTypes.extensions.includes(ext))), ['flac', 'opus']);
+  assert.equal(await page.evaluate(() => __playerTest.openLocation('/media/Lossless/', { playMedia: false })), true);
+  await page.waitForFunction(() => document.querySelectorAll('.file:not([hidden])').length === 3);
+  assert.deepEqual(await visibleNames(page), ['Song', 'Track', 'Voice']);
+  assert.equal(await page.locator('.file.audio-file:not([hidden])').count(), 3);
+  await page.selectOption('.library-type', 'video');
+  await page.waitForFunction(() => document.querySelectorAll('.file:not([hidden])').length === 0);
+  await page.selectOption('.library-type', 'audio');
+  await page.waitForFunction(() => document.querySelectorAll('.file:not([hidden])').length === 3);
+
+  const accept = await page.evaluate(() => {
+    const click = HTMLInputElement.prototype.click;
+    let value = '';
+    HTMLInputElement.prototype.click = function () { value = this.accept; };
+    try { __playerTest.actionOpenLocalFileFallback(); } finally { HTMLInputElement.prototype.click = click; }
+    return value.split(',');
+  });
+  for (const entry of ['audio/flac', 'audio/ogg', '.flac', '.opus']) assert.ok(accept.includes(entry), entry);
+  assert.equal(accept.some(entry => entry.includes(';')), false);
+});
+
+test('the player page is not listed as a document in its own folder', async t => {
+  const { page } = await openPlayer(t);
+  assert.equal(await page.evaluate(() => __playerTest.openLocation('/', { playMedia: false })), true);
+  await page.waitForFunction(() => window.app.links.url === location.origin + '/');
+  await page.locator('.document:not([hidden])').first().waitFor();
+  assert.deepEqual(await page.locator('.document:not([hidden]) .label').allTextContents(), ['Readme.txt']);
+});
+
 test('parent folder icons stay open when filters hide all files', async t => {
   const { page } = await openPlayer(t);
   assert.equal(await page.evaluate(() => app.links.folders.find(folder => folder.url === location.origin + '/')?.role), 'parent');
@@ -737,7 +810,7 @@ test('local history appears before playback and local folder queues traverse chi
   const oldRoot = await page.evaluate(() => window.__playerTest.hashState.location);
   await page.locator('.btn-local-file').click();
   await page.waitForFunction(old => window.__playerTest.hashState.location !== old, oldRoot);
-  assert.equal(await page.locator('.file:not([hidden]).in-progress').count(), 1);
+  await page.waitForFunction(() => document.querySelectorAll('.file:not([hidden]).in-progress').length === 1, null, { timeout: 10000 });
   await page.selectOption('.library-type', 'audio');
   await page.waitForFunction(() => document.querySelectorAll('.file:not([hidden])').length === 0);
   assert.deepEqual(await page.locator('.folder:not([hidden]) .label').allTextContents(), ['Sub']);

@@ -1,0 +1,46 @@
+# Runs the published image from GitHub Container Registry. No clone or build needed:
+# download this file, point the volumes at your folders, then start it.
+#
+#   curl -O https://raw.githubusercontent.com/vrsandeep/player.html/main/docker-compose.yml
+#   docker compose up -d
+#   open http://localhost:8080/
+#
+# Pick folders with environment variables, or edit the volumes below:
+#
+#   VIDEO_DIR=~/Movies AUDIO_DIR=~/Music PDF_DIR=~/Documents/pdfs docker compose up -d
+#
+# Customizing: put these in ./config (or point CONFIG_DIR at another folder).
+# Missing files fall back to the built-in defaults. Edits apply on the next page load.
+#
+#   player.html.json  Player settings. Start from Settings > "Export settings file", or:
+#                     mkdir -p config && echo '{ "defaultLanguage": "fr" }' > config/player.html.json
+#   manifest.json     App name, icons and colors when installed as an app (PWA).
+#                     Start from Settings > "Export manifest.json".
+#   *.png, *.svg ...  Icons referenced from manifest.json by file name, e.g. "icon-512.png".
+#
+# Updating:  docker compose pull && docker compose up -d
+# Stopping:  docker compose down
+#
+# Images are published from main after CI passes, tagged latest and sha-<commit>.
+# Pin one with PLAYER_TAG, e.g. PLAYER_TAG=sha-a834aa4 docker compose up -d
+#
+# To build from source instead, use docker-compose.dev.yml in the repository.
+
+services:
+  player:
+    image: ghcr.io/vrsandeep/player.html:${PLAYER_TAG:-latest}
+    ports:
+      # Change the left side to serve on another host port, e.g. "3000:80".
+      - "8080:80"
+    volumes:
+      # Each folder mounted under /library shows up as a folder in the player.
+      # Mount read-only (:ro); the player never writes to your files.
+      - ${VIDEO_DIR:-./videos}:/library/videos:ro
+      - ${AUDIO_DIR:-./audio}:/library/audio:ro
+      - ${PDF_DIR:-./pdf}:/library/pdf:ro
+      # - ~/Podcasts:/library/podcasts:ro
+      # - /Volumes/NAS/TV:/library/tv:ro
+      #
+      # Settings folder (see "Configuration" in the README). An empty folder is fine.
+      - ${CONFIG_DIR:-./config}:/config:ro
+    restart: unless-stopped

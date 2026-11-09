@@ -1,2 +1,4 @@
 assets/Thumbs.db
 .vscode/
+.DS_Store
+config/

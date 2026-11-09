@@ -1940,7 +1940,8 @@
     }
 
     .folder .arrow,
-    .file .arrow {
+    .file .arrow,
+    .document .arrow {
       /* Arrow */
       display: flex;
       justify-content: center;
@@ -1949,10 +1950,11 @@
       padding: 0;
     }
 
-    .file .arrow { filter: drop-shadow(0 0 0.1rem rgba(0, 0, 0, 0.5)); }
+    .file .arrow, .document .arrow { filter: drop-shadow(0 0 0.1rem rgba(0, 0, 0, 0.5)); }
 
     .file:hover .arrow svg,
     .folder:hover .arrow svg,
+    .document:hover .arrow svg,
     .file.current .arrow svg {
       transform: rotate(360deg);
       width: var(--tile-arrow-size-active);
@@ -1964,16 +1966,17 @@
       .library-tab { font-size: 1.1rem; }
     }
 
-    .file .arrow svg, .folder .arrow svg {
+    .file .arrow svg, .folder .arrow svg, .document .arrow svg {
       width: var(--tile-arrow-size);
       height: auto;
       flex: 0 0 auto;
     }
 
-    .file svg, .folder svg {
+    .file svg, .folder svg, .document svg {
       transition: none;
     }
-    .file svg { fill: var(--color-text-overlay); }
+    .file svg, .document svg { fill: var(--color-text-overlay); }
+    .document:hover .arrow svg { fill: var(--accent); }
     .folder svg { fill: hsl(44, 100%, 68%); }
     .folder .btn-add-to-playlist svg { fill: var(--color-text-overlay); }
 
@@ -2056,7 +2059,7 @@
     .links.list-view .label { line-height: 1.6; overflow-wrap: anywhere; }
     .links.list-view .title .watched-icon { display: none; }
     .links.list-view .btn-add-to-playlist { grid-column: 2; justify-self: center; justify-content: center; }
-    .links.list-view .file svg, .links.list-view .btn-add-to-playlist svg { fill: currentColor; }
+    .links.list-view .file svg, .links.list-view .document svg, .links.list-view .btn-add-to-playlist svg { fill: currentColor; }
     .links.list-view .btn-add-to-playlist:hover svg,
     .links.list-view .btn-add-to-playlist:focus-visible svg { fill: var(--accent); }
     .links.list-view .file-resume:not(:empty) { display: block; color: var(--color-text-muted); font-size: 1rem; line-height: 1.5; }

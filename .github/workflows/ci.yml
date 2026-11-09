@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PLAYWRIGHT_VERSION: 1.65.0
+
+permissions: {}
+
+jobs:
+  test:
+    name: Build and browser tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.15'
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Check dist/ matches src/
+        run: |
+          python build.py
+          git diff --exit-code --stat -- dist/ || { echo "::error::dist/ is out of date. Run 'python build.py' and commit the result."; exit 1; }
+
+      # The repo has no package.json; the version is pinned in PLAYWRIGHT_VERSION.
+      - name: Install Playwright
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --no-save --no-package-lock "playwright@${PLAYWRIGHT_VERSION}"
+          npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: node --test tests/*.test.cjs
+
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: player-html:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          docker run -d --name player -p 8080:80 \
+            -v "$PWD/videos:/library/videos:ro" \
+            -v "$PWD/audio:/library/audio:ro" \
+            -v "$PWD/pdf:/library/pdf:ro" \
+            player-html:ci
+          for _ in $(seq 1 30); do
+            [ "$(docker inspect --format '{{.State.Health.Status}}' player)" = healthy ] && break
+            sleep 1
+          done
+          set -x
+          [ "$(docker inspect --format '{{.State.Health.Status}}' player)" = healthy ]
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/player.html)" = 200
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Sec-Fetch-Dest: document' http://localhost:8080/)" = 302
+          curl -sS http://localhost:8080/ | grep -q 'href="videos/"'
+          curl -sS http://localhost:8080/pdf/ | grep -q '\.pdf"'
+          test "$(curl -sS -o /dev/null -w '%{content_type}' http://localhost:8080/pdf/png-predictors-low-bit-depth.pdf)" = application/pdf
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Range: bytes=0-1' http://localhost:8080/videos/webm-big-buck-bunny_trailer.webm)" = 206
+          curl -sS http://localhost:8080/player.html.json | grep -q '"startLocation"'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/manifest.json)" = 404
+
+      - name: Config override smoke test
+        run: |
+          mkdir -p "$RUNNER_TEMP/config"
+          echo '{ "defaultLanguage": "fr" }' > "$RUNNER_TEMP/config/player.html.json"
+          echo '{ "name": "Custom", "icons": [{ "src": "icon.svg", "sizes": "any" }] }' > "$RUNNER_TEMP/config/manifest.json"
+          echo '<svg xmlns="http://www.w3.org/2000/svg"/>' > "$RUNNER_TEMP/config/icon.svg"
+          docker run -d --name player-config -p 8081:80 -v "$RUNNER_TEMP/config:/config:ro" player-html:ci
+          for _ in $(seq 1 30); do curl -fsS -o /dev/null http://localhost:8081/player.html && break; sleep 1; done
+          set -x
+          curl -sS http://localhost:8081/player.html.json | grep -q '"defaultLanguage": "fr"'
+          curl -sS http://localhost:8081/manifest.json | grep -q '"Custom"'
+          test "$(curl -sS -o /dev/null -w '%{content_type}' http://localhost:8081/icon.svg)" = image/svg+xml
+
+      - name: Container logs
+        if: always()
+        run: |
+          docker logs player || true
+          docker logs player-config || true
+
+  # Kept in this workflow (instead of workflow_run) so publishing waits on the
+  # jobs above without the privileged workflow_run trigger.
+  publish:
+    name: Publish to GHCR
+    needs: [test, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
