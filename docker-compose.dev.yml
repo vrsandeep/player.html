@@ -1,0 +1,28 @@
+# Development: builds the image from this checkout and serves it on http://localhost:8080/
+# The library root lists one folder per mount below /library.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#   VIDEO_DIR=~/Movies AUDIO_DIR=~/Music PDF_DIR=~/Documents/pdfs docker compose -f docker-compose.dev.yml up -d
+#   CONFIG_DIR=~/player-config docker compose -f docker-compose.dev.yml up -d
+#
+# Host folders that do not exist are created empty by Docker.
+# player.html.json, manifest.json and icon files in ./config (or CONFIG_DIR) override
+# the built-in defaults (docker/player.html.json and the generated manifest).
+
+services:
+  player:
+    build: .
+    image: player-html
+    ports:
+      - "8080:80"
+    volumes:
+      - ${VIDEO_DIR:-./videos}:/library/videos:ro
+      - ${AUDIO_DIR:-./audio}:/library/audio:ro
+      - ${PDF_DIR:-./pdf}:/library/pdf:ro
+      # Any other folder: pick a name for the library and mount it the same way.
+      # - ~/Podcasts:/library/podcasts:ro
+      # - /Volumes/NAS/TV:/library/tv:ro
+      - ${CONFIG_DIR:-./config}:/config:ro
+      # Live-edit the built-in default without rebuilding.
+      - ./docker/player.html.json:/opt/player/player.html.json:ro
+    restart: unless-stopped

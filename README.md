@@ -48,6 +48,13 @@ It can be used as:
 
 `player.html` treats the directory listing HTML as an API for enumerating files/folders, so it works with simple web servers (see [Supported web servers](#supported-web-servers)).
 
+### Use With Docker
+```
+docker run --rm -p 8080:80 -v ~/Movies:/library/videos:ro ghcr.io/vrsandeep/player.html
+```
+
+Each folder mounted under `/library` appears in the library at `http://localhost:8080`. To customize, mount a folder containing `player.html.json` and/or `manifest.json` (plus its icons) at `/config`. See [`docker-compose.yml`](docker-compose.yml) for Compose usage, or build from source with `make up` (`docker compose -f docker-compose.dev.yml up --build`).
+
 ### Use As A Local Media Player (PWA)
 Serve `player.html` from `https://` (or `http://localhost`) and use your browser's "Install" option to install it as an app.
 
@@ -74,11 +81,12 @@ If you are customizing a hosted deployment, the usual pairing is:
 * Progress bar with timestamp preview thumbnail on hover/click/drag.
 
 ### Playback (Audio)
-* Audio playback in the browser media engine (`MP3`, `WAV`, `AAC`, `M4A`, `MKA`, `OGG`, etc).
+* Audio playback in the browser media engine (`MP3`, `WAV`, `AAC`, `M4A`, `MKA`, `OGG`, `OPUS`, `FLAC`, etc).
 * Audio cover art thumbnails (sidecar art and embedded art, when available).
 
 ### Browsing & Library
 * Uses folder listing pages as an API (no backend required).
+* PDF, text (`.txt`), and HTML (`.html`, `.htm`, `.xhtml`) files open in the browser in a new tab.
 * Switch between folder and file tiles and a compact list view. The browser remembers your view and sort choices.
 * Sort filenames naturally, or sort by modified date, size, or recent playback. Unknown dates and sizes stay at the end.
 * Combine audio/video filters with played, unplayed, or in-progress filters. Folder navigation stays available while filtering. Searches show matching media and folders, with a result count only while searching.

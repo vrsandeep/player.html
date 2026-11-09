@@ -39,7 +39,7 @@
           {
             action: startUrl,
             accept: {
-              "audio/*": [".mp3", ".wav", ".aac", ".m4a", ".mka", ".ogg"],
+              "audio/*": [".mp3", ".wav", ".aac", ".m4a", ".mka", ".ogg", ".opus", ".flac"],
               "video/*": [".mp4", ".mov", ".webm", ".mkv"]
             }
           }

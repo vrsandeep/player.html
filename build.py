@@ -422,10 +422,21 @@ def inline_assets(html: str) -> str:
     return html
 
 
-def build_variant(out_name: str, *, minify: bool = False) -> tuple[pathlib.Path, float, dict[str, float]]:
+def set_version(html: str, version: str) -> str:
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise ValueError(f"Version must look like 1.2.3, got {version!r}")
+    html, count = re.subn(r"(<meta name='version' content=')[^']*(')", rf"\g<1>{version}\g<2>", html)
+    if count != 1:
+        raise ValueError(f"Expected one <meta name='version'> in {TEMPLATE}, found {count}")
+    return html
+
+
+def build_variant(out_name: str, *, minify: bool = False, version: str | None = None) -> tuple[pathlib.Path, float, dict[str, float]]:
     build_started = time.perf_counter()
     minify_metrics: dict[str, float] = {}
     html = read_text(TEMPLATE)
+    if version:
+        html = set_version(html, version)
     html = inline_styles(html, minify=minify, metrics=minify_metrics)
     html = remove_dev_stylesheet(html)
     html = inline_svg_sprite(html, minify=minify, metrics=minify_metrics)
@@ -459,12 +470,12 @@ def format_build_message(out_path: pathlib.Path, elapsed: float, *, minify: bool
     return message
 
 
-def build(log_fn=None, *, dev: bool = False) -> None:
+def build(log_fn=None, *, dev: bool = False, version: str | None = None) -> None:
     total_started = time.perf_counter()
     outputs: list[tuple[pathlib.Path, float, bool, dict[str, float]]] = []
-    outputs.append((*build_variant("player.html", minify=False), False))
+    outputs.append((*build_variant("player.html", minify=False, version=version), False))
     if not dev:
-        outputs.append((*build_variant("player.min.html", minify=True), True))
+        outputs.append((*build_variant("player.min.html", minify=True, version=version), True))
 
     for out_path, elapsed, metrics, is_minified in outputs:
         message = format_build_message(out_path, elapsed, minify=is_minified, metrics=metrics)
@@ -537,12 +548,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build dist/player.html from src/")
     parser.add_argument("--watch", action="store_true", help="Rebuild on file changes")
     parser.add_argument("--dev", action="store_true", help="Skip building dist/player.min.html and only write dist/player.html")
+    parser.add_argument("--version", help="Override the app version (e.g. 2.39.0) instead of the one in src/player.html")
     args = parser.parse_args()
 
     if args.watch:
         watch(dev=args.dev)
     else:
-        build(dev=args.dev)
+        build(dev=args.dev, version=args.version)
 
 
 if __name__ == "__main__":

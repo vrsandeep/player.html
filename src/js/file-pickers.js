@@ -145,7 +145,7 @@
           advanced: {
             queryParameters:
               'select=id,name,size,file,audio,video,@microsoft.graph.downloadUrl',
-            filter: 'mp4,webm,mkv,wav,mp3,aac,m4a,ogg',
+            filter: 'mp4,webm,mkv,wav,mp3,aac,m4a,ogg,opus,flac',
             navigation: {
               sourceTypes: ['OneDrive', 'Sites', 'Recent']
             },
