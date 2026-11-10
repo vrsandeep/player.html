@@ -5,7 +5,7 @@
 COMPOSE ?= docker compose -f docker-compose.dev.yml
 URL ?= http://localhost:8080/
 
-export VIDEO_DIR AUDIO_DIR PDF_DIR CONFIG_DIR
+export VIDEO_DIR AUDIO_DIR DOCUMENTS_DIR CONFIG_DIR
 
 .DEFAULT_GOAL := help
 .PHONY: help build up down restart logs ps open

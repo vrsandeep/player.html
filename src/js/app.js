@@ -292,13 +292,22 @@
       return re.test(url);
     }
 
-    const documentExtensions = ['pdf', 'txt', 'html', 'htm', 'xhtml'];
+    const documentKinds = { pdf: 'pdf', txt: 'text', html: 'html', htm: 'html', xhtml: 'html' };
+    const documentExtensions = Object.keys(documentKinds);
     // Opened by the browser's own viewer, so `local://` session URLs cannot be used.
-    const isDocument = (url) => {
+    const getDocumentKind = (url) => {
       const cleanUrl = String(url || '').split('#')[0].split('?')[0];
-      const re = new RegExp(`\\.(${documentExtensions.join('|')})$`, 'i');
-      if (!re.test(cleanUrl) || isLocalUrl(cleanUrl)) return false;
-      return resolveUrl(cleanUrl) !== `${window.location.origin}${window.location.pathname}`;
+      const kind = documentKinds[(/\.([^./]+)$/.exec(cleanUrl)?.[1] || '').toLowerCase()];
+      if (!kind || isLocalUrl(cleanUrl)) return '';
+      return resolveUrl(cleanUrl) === `${window.location.origin}${window.location.pathname}` ? '' : kind;
+    }
+    const isDocument = (url) => !!getDocumentKind(url);
+    const getLibraryFileType = (url) => (isDocument(url) ? 'document' : (isAudio(url) ? 'audio' : 'video'));
+
+    // Browsers save "Webpage, Complete" as page.html plus a page_files/ folder of its assets.
+    const createResourceFolderFilter = (files) => {
+      const folders = files.filter((file) => getDocumentKind(file.url) === 'html').map((file) => `${stripUrlExtension(file.url)}_files/`);
+      return (entry) => !folders.some((folder) => String(entry.url).startsWith(folder));
     }
 
     const linksHash = (links) => {
@@ -1078,9 +1087,30 @@
 
     const getOpenUrlInput = () => $('.open-url-input');
 
+    const libraryScrollPositions = new Map();
+
+    const keepLibraryInView = (previousLocation, nextLocation) => {
+      if (!$libraryToolbar) return;
+      const scrollTop = window.scrollY;
+      if (previousLocation) libraryScrollPositions.set(previousLocation, scrollTop);
+      const libraryTop = Math.round($libraryToolbar.getBoundingClientRect().top + scrollTop);
+      const saved = libraryScrollPositions.get(nextLocation);
+      const target = Number.isFinite(saved) ? saved : (scrollTop > libraryTop ? libraryTop : null);
+      if (target === null) {
+        $links.style.minHeight = '';
+        return;
+      }
+      // Short folders would otherwise be too short to scroll to the target.
+      const linksTop = $links.getBoundingClientRect().top + scrollTop;
+      const belowLinks = document.documentElement.scrollHeight - (linksTop + $links.offsetHeight);
+      $links.style.minHeight = `${Math.max(0, Math.ceil(target + window.innerHeight - linksTop - belowLinks))}px`;
+      window.scrollTo({ top: target, behavior: 'instant' });
+    }
+
     const showLinks = async (links) => {
       const location = hashState.location || links.url || '';
       if (libraryState.location !== location) {
+        keepLibraryInView(libraryState.location, location);
         libraryRenderRequestId += 1;
         clearThumbnailQueue();
         revokeThumbnailObjectUrls();
@@ -1128,9 +1158,9 @@
     }
 
     const matchesLibraryFilters = (file) => {
-      if (isDocument(file.url)) return libraryState.type === 'all' && libraryState.status === 'all';
-      if (libraryState.type === 'audio' && !isAudio(file.url)) return false;
-      if (libraryState.type === 'video' && isAudio(file.url)) return false;
+      const type = getLibraryFileType(file.url);
+      if (libraryState.type !== 'all' && libraryState.type !== type) return false;
+      if (type === 'document') return libraryState.type === 'document' || libraryState.status === 'all';
       const record = file.watchRecord;
       switch (libraryState.status) {
         case 'unplayed': return !record || (!record.completed && !(record.position > 0));
@@ -1205,7 +1235,7 @@
       $('.library-sort').value = libraryState.mode === 'continue' ? libraryState.continueSort : libraryState.sort;
       $('.library-type').value = libraryState.type;
       $('.library-status').value = libraryState.status;
-      $('.library-status').disabled = libraryState.mode === 'continue' || !remember;
+      $('.library-status').disabled = libraryState.mode === 'continue' || !remember || libraryState.type === 'document';
       updateSearchControls();
     }
 
@@ -1220,6 +1250,8 @@
       const history = await getLibraryHistory();
       const records = new Map(history.map((record) => [record.id, record]));
       const knownFiles = new Map([...sourceFiles, ...searchState.entries].map((file) => [file.url, file]));
+      const outsideResourceFolders = createResourceFolderFilter([...knownFiles.values()]);
+      files = files.filter(outsideResourceFolders);
       const continueFiles = [];
       for (const record of history) {
         if (record.completed || !(record.position > 0) || !Number.isFinite(record.duration) || record.duration <= 0) continue;
@@ -1233,7 +1265,7 @@
       if (libraryState.mode === 'continue') {
         const tokens = tokenizeSearchQuery(searchState.query);
         files = continueFiles.filter((file) => (
-          (libraryState.type === 'all' || (isAudio(file.url) ? 'audio' : 'video') === libraryState.type) &&
+          (libraryState.type === 'all' || getLibraryFileType(file.url) === libraryState.type) &&
           tokens.every((token) => getSearchRelativeLabel(file.url, root).toLowerCase().includes(token))
         )).sort(compareLibraryFiles);
       } else {
@@ -1243,7 +1275,7 @@
       const totalFiles = files.length;
       const showFolders = libraryState.mode === 'library';
       const folderSource = searching ? getSearchMatches(searchState.query, searchState.folderEntries) : (links.folders || []);
-      let folders = showFolders ? [...folderSource].sort((a, b) => {
+      let folders = showFolders ? folderSource.filter(outsideResourceFolders).sort((a, b) => {
         const aParent = (a.role || a.type) === 'parent';
         const bParent = (b.role || b.type) === 'parent';
         return aParent !== bParent ? (aParent ? -1 : 1) : sortFiles(a, b);
@@ -2746,7 +2778,7 @@
     var thumbnailObserver;
     const populateThumbnails = async () => {
       if (!settings.thumbnailing.get() || libraryState.view === 'list') return;
-      const $files = [...document.querySelectorAll('.file:not([hidden])')];
+      const $files = [...document.querySelectorAll('.file:not([hidden]), .document:not([hidden])')];
       setupThumbnailObserver($files);
     }
 
@@ -2755,6 +2787,11 @@
       if ($file.dataset.thumbnailQueued === 'true' || $file.dataset.thumbnailDone === 'true') return;
       if (hasPreRenderedThumbnail($file)) {
         $file.dataset.thumbnailDone = 'true';
+        return;
+      }
+      if ($file.classList.contains('document')) {
+        $file.dataset.thumbnailDone = 'true';
+        setDocumentThumbnail($file, $file.href);
         return;
       }
 
@@ -4938,7 +4975,11 @@
         }
         renderLibraryView();
       });
-      $('.library-type').on('change', (event) => { libraryState.type = event.target.value; renderLibraryView(); });
+      $('.library-type').on('change', (event) => {
+        libraryState.type = event.target.value;
+        updateLibraryControls();
+        renderLibraryView();
+      });
       $('.library-status').on('change', (event) => { libraryState.status = event.target.value; renderLibraryView(); });
       updateLibraryControls();
     }
@@ -6584,6 +6625,95 @@
     );
 
     const hasPreRenderedThumbnail = (node) => node.style.getPropertyValue('--image-url-0').length > ('url(http://)').length;
+
+    const textPreviewBytes = 4096;
+
+    // Servers may ignore Range, so stop reading once the preview is full.
+    const readTextPreview = async (url) => {
+      const response = await fetch(url, { headers: { Range: `bytes=0-${textPreviewBytes - 1}` } });
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      const bytes = new Uint8Array(textPreviewBytes);
+      let size = 0;
+      while (size < textPreviewBytes) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = value.subarray(0, textPreviewBytes - size);
+        bytes.set(chunk, size);
+        size += chunk.length;
+      }
+      reader.cancel().catch(() => {});
+      return new TextDecoder().decode(bytes.subarray(0, size));
+    }
+
+    const renderTextThumbnail = (text) => {
+      const thumbnailOpts = app.options.thumbnails;
+      const width = (thumbnailOpts.size || 320) * 2;
+      const height = Math.round(width * 9 / 16);
+      const fontSize = Math.round(width / 40);
+      const lineHeight = Math.round(fontSize * 1.4);
+      const padding = fontSize;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fbfbf8';
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#26262b';
+      ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.textBaseline = 'top';
+
+      const maxChars = Math.max(1, Math.floor((width - padding * 2) / ctx.measureText('M').width));
+      const maxLines = Math.floor((height - padding) / lineHeight);
+      const lines = [];
+      for (const line of text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n')) {
+        for (let i = 0; i === 0 || i < line.length; i += maxChars) lines.push(line.slice(i, i + maxChars));
+        if (lines.length >= maxLines) break;
+      }
+      lines.slice(0, maxLines).forEach((line, i) => ctx.fillText(line, padding, padding + i * lineHeight));
+
+      // Text needs a higher quality than video frames to stay legible.
+      const mime = thumbnailOpts.mime || {};
+      return new Promise((resolve) => canvas.toBlob(resolve, mime.type || 'image/webp', Math.max(mime.quality || 0, 0.7)));
+    }
+
+    const setHtmlPreview = (node, url) => {
+      if (node.querySelector('.document-preview')) return;
+      const frame = document.createElement('iframe');
+      frame.className = 'document-preview';
+      frame.setAttribute('sandbox', '');
+      frame.setAttribute('loading', 'lazy');
+      frame.setAttribute('scrolling', 'no');
+      frame.setAttribute('tabindex', '-1');
+      frame.setAttribute('aria-hidden', 'true');
+      frame.src = url;
+      node.prepend(frame);
+    }
+
+    const setTextThumbnail = async (node, url) => {
+      const cacheKey = getThumbnailCacheKey(url, 'text', [0]);
+      await migrateThumbnailLocalStorageCache();
+      if (applyThumbnailCacheItems(node, getThumbnailCacheItems(await readThumbnailCache(cacheKey)))) {
+        settings.cache.update();
+        return;
+      }
+      try {
+        const blob = await renderTextThumbnail(await readTextPreview(url));
+        if (!blob || !node.isConnected) return;
+        node.style.setProperty('--image-url-0', `url('${escapeCssUrl(createThumbnailObjectUrl(blob))}')`);
+        await writeThumbnailCache(cacheKey, [{ blob, size: blob.size, mime: blob.type }]);
+        settings.cache.update();
+      } catch (e) {
+        if (isDebug()) console.warn('Text thumbnail generation failed', url, e);
+      }
+    }
+
+    const setDocumentThumbnail = async (node, url) => {
+      if (hasPreRenderedThumbnail(node)) return;
+      const kind = getDocumentKind(url);
+      if (kind === 'html') setHtmlPreview(node, url);
+      else if (kind === 'text') await setTextThumbnail(node, url);
+    }
 
     const setThumbnail = async (node, url) => {
       if (hasPreRenderedThumbnail(node)) return;
