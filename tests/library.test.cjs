@@ -732,7 +732,11 @@ test('Continue playing stays within the library and restores the folder view', a
 test('library switches leave the current page position alone instead of restoring tab scroll', async t => {
   for (const variant of ['player.html', 'player.min.html']) {
     const { page } = await openPlayer(t, [record('Episode 2.webm', 120), record('Sub/Child.webm', 60)], variant);
-    await page.addStyleTag({ content: '.media-container { height: 600px; }' });
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '600px';
+      document.body.prepend(spacer);
+    });
     const scrollPosition = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(window.scrollY)))));
     await page.evaluate(() => window.scrollTo(0, 180));
     assert.equal(await scrollPosition(), 180);
@@ -935,6 +939,52 @@ test('unplayable looped queues stop after one failed pass and allow a manual ret
   await page.waitForFunction(() => app.playlistIndex === 1 && !window.__playerTest.getMediaUrl());
   assert.ok(mediaRequests.length > firstPass);
   assert.equal(await page.locator('body').evaluate(el => el.classList.contains('is-stopped')), true);
+});
+
+test('transport controls sit below the picture on a narrow screen and over it on a wide one', async t => {
+  const { page } = await openPlayer(t);
+  const measure = async (width) => {
+    await page.setViewportSize({ width, height: 800 });
+    return page.evaluate(() => {
+      document.body.classList.add('is-loaded', 'is-paused');
+      document.body.classList.remove('is-stopped');
+      const media = document.querySelector('.media-container').getBoundingClientRect();
+      const controls = document.querySelector('.controls').getBoundingClientRect();
+      return {
+        position: getComputedStyle(document.querySelector('.controls')).position,
+        mediaBottom: media.bottom,
+        controlsTop: controls.top
+      };
+    });
+  };
+  const phone = await measure(390);
+  assert.equal(phone.position, 'relative');
+  assert.ok(phone.controlsTop >= phone.mediaBottom - 1, 'Narrow controls overlap the picture');
+  const desk = await measure(1280);
+  assert.equal(desk.position, 'absolute');
+  assert.ok(desk.controlsTop < desk.mediaBottom, 'Wide controls sit below the picture');
+});
+
+test('volume bar sets the curved level and the speaker button restores it', async t => {
+  const { page } = await openPlayer(t);
+  const read = () => page.evaluate(() => ({
+    bar: Number(document.querySelector('.volume-bar').value),
+    volume: document.querySelector('.player').volume
+  }));
+  await page.locator('.volume-bar').evaluate(bar => {
+    bar.value = '0.4';
+    bar.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const curved = Math.pow(0.4, 1.8);
+  const set = await read();
+  assert.equal(set.bar, 0.4);
+  assert.ok(Math.abs(set.volume - curved) < 0.001, set.volume);
+  await page.locator('.btn-volume').click();
+  assert.deepEqual(await read(), { bar: 0, volume: 0 });
+  await page.locator('.btn-volume').click();
+  const restored = await read();
+  assert.equal(restored.bar, 0.4);
+  assert.ok(Math.abs(restored.volume - curved) < 0.001, restored.volume);
 });
 
 test('minified build has the same library controls and fits a narrow viewport', async t => {
