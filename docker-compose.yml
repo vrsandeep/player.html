@@ -7,7 +7,7 @@
 #
 # Pick folders with environment variables, or edit the volumes below:
 #
-#   VIDEO_DIR=~/Movies AUDIO_DIR=~/Music PDF_DIR=~/Documents/pdfs docker compose up -d
+#   VIDEO_DIR=~/Movies AUDIO_DIR=~/Music DOCUMENTS_DIR=~/Documents docker compose up -d
 #
 # Customizing: put these in ./config (or point CONFIG_DIR at another folder).
 # Missing files fall back to the built-in defaults. Edits apply on the next page load.
@@ -37,7 +37,7 @@ services:
       # Mount read-only (:ro); the player never writes to your files.
       - ${VIDEO_DIR:-./videos}:/library/videos:ro
       - ${AUDIO_DIR:-./audio}:/library/audio:ro
-      - ${PDF_DIR:-./pdf}:/library/pdf:ro
+      - ${DOCUMENTS_DIR:-./documents}:/library/documents:ro
       # - ~/Podcasts:/library/podcasts:ro
       # - /Volumes/NAS/TV:/library/tv:ro
       #

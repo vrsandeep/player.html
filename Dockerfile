@@ -4,7 +4,7 @@
 #   docker run --rm -p 8080:80 \
 #     -v /path/to/videos:/library/videos:ro \
 #     -v /path/to/audio:/library/audio:ro \
-#     -v /path/to/pdfs:/library/pdf:ro \
+#     -v /path/to/documents:/library/documents:ro \
 #     -v /path/to/config:/config:ro \
 #     player-html
 #
