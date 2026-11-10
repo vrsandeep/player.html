@@ -6,7 +6,7 @@ dist
 tests
 videos
 audio
-pdf
+documents
 config
 **/__pycache__
 **/*.md

@@ -77,7 +77,7 @@ jobs:
           docker run -d --name player -p 8080:80 \
             -v "$PWD/videos:/library/videos:ro" \
             -v "$PWD/audio:/library/audio:ro" \
-            -v "$PWD/pdf:/library/pdf:ro" \
+            -v "$PWD/documents:/library/documents:ro" \
             player-html:ci
           for _ in $(seq 1 30); do
             [ "$(docker inspect --format '{{.State.Health.Status}}' player)" = healthy ] && break
@@ -87,9 +87,13 @@ jobs:
           [ "$(docker inspect --format '{{.State.Health.Status}}' player)" = healthy ]
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/player.html)" = 200
           test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Sec-Fetch-Dest: document' http://localhost:8080/)" = 302
+          # Plain-HTTP remote hosts get no Sec-Fetch-* headers.
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Upgrade-Insecure-Requests: 1' http://localhost:8080/)" = 302
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Sec-Fetch-Dest: empty' http://localhost:8080/)" = 200
           curl -sS http://localhost:8080/ | grep -q 'href="videos/"'
-          curl -sS http://localhost:8080/pdf/ | grep -q '\.pdf"'
-          test "$(curl -sS -o /dev/null -w '%{content_type}' http://localhost:8080/pdf/png-predictors-low-bit-depth.pdf)" = application/pdf
+          curl -sS http://localhost:8080/documents/ | grep -q '\.pdf"'
+          test "$(curl -sS -o /dev/null -w '%{content_type}' http://localhost:8080/documents/png-predictors-low-bit-depth.pdf)" = application/pdf
+          test "$(curl -sS -o /dev/null -w '%{content_type}' 'http://localhost:8080/documents/pdftoppm(1)_files/main.css')" = text/css
           test "$(curl -sS -o /dev/null -w '%{http_code}' -H 'Range: bytes=0-1' http://localhost:8080/videos/webm-big-buck-bunny_trailer.webm)" = 206
           curl -sS http://localhost:8080/player.html.json | grep -q '"startLocation"'
           test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8080/manifest.json)" = 404

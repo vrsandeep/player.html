@@ -330,6 +330,7 @@
     "ui.all-media": "All media",
     "ui.video": "Video",
     "ui.audio": "Audio",
+    "ui.documents": "Documents",
     "ui.progress": "Progress",
     "ui.all-states": "All states",
     "ui.unplayed": "Unplayed",

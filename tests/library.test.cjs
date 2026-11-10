@@ -47,6 +47,7 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
   const errors = [];
   const mediaRequests = [];
+  const documentRequests = [];
   t.after(async () => {
     await context.close();
     assert.deepEqual(errors, [], 'Unexpected browser exceptions');
@@ -87,8 +88,13 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
     if (url.pathname === '/media/Other/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Other/', [['Only audio.mp3', '2026-10-18 12:00', '5M']]) });
     if (url.pathname === '/media/Sub/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Sub/', [['Nested/', '-', '-'], ['Child.webm', '2026-10-18 12:00', '40M']]) });
     if (url.pathname === '/media/Sub/Nested/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Sub/Nested/', [['Deep.webm', '-', '50M']]) });
-    if (url.pathname === '/media/Docs/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Docs/', [['../', '-', '-'], ['Guide.pdf', '2026-10-17 12:00', '1M'], ['Guide.jpg', '-', '-'], ['Notes.txt', '-', '1K'], ['Page.html', '-', '2K'], ['Page.htm', '-', '2K'], ['Page.xhtml', '-', '2K'], ['Clip.webm', '2026-10-16 12:00', '2M']]) });
+    if (url.pathname === '/media/Docs/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Docs/', [['../', '-', '-'], ['Page_files/', '-', '-'], ['Extras_files/', '-', '-'], ['Guide.pdf', '2026-10-17 12:00', '1M'], ['Guide.jpg', '-', '-'], ['Notes.txt', '-', '1K'], ['Page.html', '-', '2K'], ['Page.htm', '-', '2K'], ['Page.xhtml', '-', '2K'], ['Clip.webm', '2026-10-16 12:00', '2M']]) });
     if (url.pathname === '/media/Docs/Guide.pdf') return route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n%%EOF\n' });
+    if (url.pathname === '/media/Docs/Notes.txt') {
+      documentRequests.push({ path: url.pathname, range: route.request().headers().range || '' });
+      return route.fulfill({ contentType: 'text/plain', body: 'Meeting notes\n'.repeat(1000) });
+    }
+    if (url.pathname === '/media/Docs/Page.html') return route.fulfill({ contentType: 'text/html', body: '<!doctype html><h1>Page</h1><script>parent.__previewScriptRan = true;</script>' });
     if (url.pathname === '/media/Lossless/') return route.fulfill({ contentType: 'text/html', body: listing('/media/Lossless/', [['../', '-', '-'], ['Track.flac', '-', '30M'], ['Voice.opus', '-', '2M'], ['Song.mp3', '-', '5M']]) });
     if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: listing('/', [['media/', '-', '-'], ['player.html', '-', '1M'], ['Readme.txt', '-', '1K']]) });
     if (/\.(webm|mp3)$/.test(url.pathname)) mediaRequests.push(url.pathname);
@@ -104,7 +110,7 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
     throw error;
   }
   await page.waitForFunction(() => !document.querySelector('.links-search-input').disabled);
-  return { page, context, mediaRequests };
+  return { page, context, mediaRequests, documentRequests };
 }
 
 const visibleNames = page => page.locator('.file:not([hidden]) .label').allTextContents();
@@ -449,7 +455,7 @@ test('library controls share padding and typography and grow with their text', a
   }
 });
 
-test('portrait filters stay on one row with native styling and no right padding', async t => {
+test('portrait filters stay on one row with native styling and balanced padding', async t => {
   for (const variant of ['player.html', 'player.min.html']) {
     const { page } = await openPlayer(t, [record('Episode 2.webm', 120)], variant);
     for (const width of [320, 375, 390, 480]) {
@@ -470,8 +476,8 @@ test('portrait filters stay on one row with native styling and no right padding'
         assert.equal(field.top, fields[0].top, variant + ' at ' + width);
         assert.equal(field.fontSize, '16px');
         assert.equal(field.appearance, 'auto');
-        assert.equal(field.paddingLeft, '12px');
-        assert.equal(field.paddingRight, '0px');
+        assert.equal(field.paddingLeft, '6px');
+        assert.equal(field.paddingRight, '6px');
         assert.equal(field.customCaretCount, 0);
       });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
@@ -544,6 +550,57 @@ test('directory metadata excludes filenames and does not invent missing sizes or
   assert.ok(Object.values(metadata).every(result => result.heads === 0));
 });
 
+test('opening a folder keeps the library in view and going back restores the scroll position', async t => {
+  const { page } = await openPlayer(t);
+  await page.setViewportSize({ width: 1280, height: 400 });
+  const toolbarTop = () => page.evaluate(() => Math.round(document.querySelector('.library-toolbar').getBoundingClientRect().top) || 0);
+  await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+  const scrolled = await page.evaluate(() => Math.round(scrollY));
+  assert.ok(await toolbarTop() < 0, 'test needs the library scrolled past its toolbar');
+
+  await page.locator('.folder:not([hidden])').filter({ hasText: 'Other' }).locator('.label').click();
+  await page.waitForFunction(() => document.querySelector('.file:not([hidden]) .label')?.textContent === 'Only audio');
+  assert.equal(await toolbarTop(), 0);
+
+  await page.locator('.folder.parent:not([hidden]) .label').click();
+  await page.waitForFunction(() => document.querySelectorAll('.file:not([hidden])').length === 5);
+  assert.equal(await page.evaluate(() => Math.round(scrollY)), scrolled);
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+  await page.locator('.folder:not([hidden])').filter({ hasText: 'Sub' }).locator('.label').click();
+  await page.waitForFunction(() => document.querySelector('.file:not([hidden]) .label')?.textContent === 'Child');
+  assert.equal(await page.evaluate(() => scrollY), 0);
+});
+
+test('a saved page\'s _files folder is hidden next to its HTML file', async t => {
+  const { page } = await openPlayer(t);
+  assert.equal(await page.evaluate(() => __playerTest.openLocation('/media/Docs/', { playMedia: false })), true);
+  await page.waitForFunction(() => document.querySelectorAll('.document:not([hidden])').length === 5);
+  assert.deepEqual(await page.locator('.folder:not([hidden]) .label').allTextContents(), ['Parent Folder', 'Extras_files']);
+});
+
+test('text tiles get a cached image of their first lines and HTML tiles a script-free live preview', async t => {
+  const { page, documentRequests } = await openPlayer(t, [], 'player.html', { thumbnailing: true });
+  assert.equal(await page.evaluate(() => __playerTest.openLocation('/media/Docs/', { playMedia: false })), true);
+  const tile = name => page.locator('.document:not([hidden])').filter({ has: page.locator('.label', { hasText: new RegExp(`^${name.replace('.', '\\.')}$`) }) });
+  await page.waitForFunction(() => [...document.querySelectorAll('.document')].some(el => el.href.endsWith('/Notes.txt') && el.style.getPropertyValue('--image-url-0').includes('blob:')));
+  assert.deepEqual(documentRequests, [{ path: '/media/Docs/Notes.txt', range: 'bytes=0-4095' }]);
+
+  const $frame = tile('Page.html').locator('iframe.document-preview');
+  await $frame.waitFor({ state: 'attached' });
+  assert.equal(await $frame.getAttribute('sandbox'), '');
+  assert.equal(await $frame.getAttribute('src'), `${root}Docs/Page.html`);
+  await page.waitForFunction(() => [...document.querySelectorAll('iframe.document-preview')].some(frame => frame.src.endsWith('/Page.html')));
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.__previewScriptRan), undefined);
+  assert.equal(await tile('Guide.pdf').locator('iframe').count(), 0);
+  assert.match(await tile('Guide.pdf').evaluate(el => el.style.getPropertyValue('--image-url-0')), /Guide\.jpg/);
+
+  await page.locator('.library-view-list').click();
+  assert.equal(await $frame.isVisible(), false);
+});
+
 test('PDF, text, and HTML tiles open in a new browser tab without touching playback or the queue', async t => {
   const names = ['Guide.pdf', 'Notes.txt', 'Page.htm', 'Page.html', 'Page.xhtml'];
   for (const variant of ['player.html', 'player.min.html']) {
@@ -576,6 +633,14 @@ test('PDF, text, and HTML tiles open in a new browser tab without touching playb
       await page.selectOption('.library-status', status);
       await page.waitForFunction(count => document.querySelectorAll('.document:not([hidden])').length === count, shown);
     }
+    await page.selectOption('.library-status', 'unplayed');
+    await page.selectOption('.library-type', 'document');
+    await page.waitForFunction(count => document.querySelectorAll('.document:not([hidden])').length === count && document.querySelectorAll('.file:not([hidden])').length === 0, names.length);
+    assert.equal(await page.locator('.library-status').isDisabled(), true);
+    await page.selectOption('.library-type', 'all');
+    assert.equal(await page.locator('.library-status').isDisabled(), false);
+    await page.selectOption('.library-status', 'all');
+    await page.waitForFunction(count => document.querySelectorAll('.document:not([hidden])').length === count, names.length);
     await page.locator('.library-view-list').click();
     assert.equal(await $documents.first().isVisible(), true);
     await page.locator('.library-view-tiles').click();
