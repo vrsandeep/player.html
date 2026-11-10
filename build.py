@@ -356,7 +356,7 @@ def inline_styles(html: str, *, minify: bool = False, metrics: dict[str, float] 
 
 def remove_dev_stylesheet(html: str) -> str:
     pattern = re.compile(
-        r"<link[^>]*rel=['\"]stylesheet['\"][^>]*href=['\"]\./styles\.css['\"][^>]*>",
+        r"<link[^>]*rel=['\"]stylesheet['\"][^>]*href=['\"]\./(?:styles|theme)\.css['\"][^>]*>\s*",
         re.IGNORECASE,
     )
     return pattern.sub("", html)

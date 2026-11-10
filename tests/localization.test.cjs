@@ -79,6 +79,33 @@ test('reviewed translations distinguish font styles, saved progress, and setting
   }
 });
 
+test('theme choices keep a distinct translated name in every locale', () => {
+  const themes = {
+    en: ['Theme', 'System', 'Night', 'Light', 'Ink', 'Paper', 'Dusk', 'Harbor', 'Moss'],
+    es: ['Tema', 'Sistema', 'Noche', 'Claro', 'Tinta', 'Papel', 'Atardecer', 'Puerto', 'Musgo'],
+    fr: ['Thème', 'Système', 'Nuit', 'Clair', 'Encre', 'Papier', 'Crépuscule', 'Havre', 'Mousse'],
+    de: ['Design', 'System', 'Nacht', 'Hell', 'Tinte', 'Papier', 'Dämmerung', 'Hafen', 'Moos'],
+    pt: ['Tema', 'Sistema', 'Noite', 'Claro', 'Tinta', 'Papel', 'Crepúsculo', 'Porto', 'Musgo'],
+    ja: ['テーマ', 'システム', 'ナイト', 'ライト', 'インク', 'ペーパー', 'ダスク', 'ハーバー', 'モス'],
+    'zh-Hans': ['主题', '系统', '夜色', '浅色', '墨色', '纸色', '暮色', '港湾', '苔色'],
+    'zh-Hant': ['佈景主題', '系統', '夜色', '淺色', '墨色', '紙色', '暮色', '港灣', '苔色'],
+    hi: ['थीम', 'सिस्टम', 'रात', 'हल्की', 'स्याही', 'कागज़', 'गोधूलि', 'बंदरगाह', 'काई'],
+    ar: ['المظهر', 'النظام', 'ليلي', 'فاتح', 'حبر', 'ورق', 'غسق', 'ميناء', 'طحلب'],
+    it: ['Tema', 'Sistema', 'Notte', 'Chiaro', 'Inchiostro', 'Carta', 'Crepuscolo', 'Porto', 'Muschio'],
+    ko: ['테마', '시스템', '나이트', '라이트', '잉크', '페이퍼', '더스크', '하버', '모스'],
+    nl: ['Thema', 'Systeem', 'Nacht', 'Licht', 'Inkt', 'Papier', 'Schemer', 'Haven', 'Mos'],
+    pl: ['Motyw', 'Systemowy', 'Noc', 'Jasny', 'Atrament', 'Papier', 'Zmierzch', 'Port', 'Mech'],
+    fa: ['پوسته', 'سیستم', 'شب', 'روشن', 'جوهر', 'کاغذ', 'غروب', 'بندر', 'خزه'],
+    he: ['ערכת נושא', 'מערכת', 'לילה', 'בהיר', 'דיו', 'נייר', 'בין ערביים', 'נמל', 'טחב'],
+    tr: ['Tema', 'Sistem', 'Gece', 'Açık', 'Mürekkep', 'Kâğıt', 'Alacakaranlık', 'Liman', 'Yosun']
+  };
+  const keys = ['settings.theme.label', 'settings.theme.system', 'settings.theme.night', 'settings.theme.light', 'settings.theme.ink', 'settings.theme.paper', 'settings.theme.dusk', 'settings.theme.harbor', 'settings.theme.moss'];
+  for (const { locale, messages } of allCatalogs) {
+    assert.deepEqual(keys.map(key => messages[key]), themes[locale], locale);
+    assert.equal(new Set(themes[locale].slice(1)).size, 8, `${locale}: theme names collide`);
+  }
+});
+
 test('shared source corrections preserve action scope and diagnostic uncertainty in every locale', () => {
   assert.equal(english.messages['ui.go-back-10-seconds'], 'Seek backward');
   assert.equal(english.messages['ui.go-forward-30-seconds'], 'Seek forward');
@@ -383,6 +410,8 @@ for (const variant of ['player.html', 'player.min.html']) {
     assert.equal(await page.locator('.settings-section-heading').first().textContent(), '界面');
     assert.equal(await page.locator('.setting-language').getAttribute('aria-label'), '语言');
     assert.match(await page.locator('.setting-language').locator('..').locator('..').locator('..').getAttribute('title'), /浏览器/);
+    assert.equal(await page.locator('.setting-theme').getAttribute('aria-label'), '主题');
+    assert.deepEqual(await page.locator('.setting-theme option').allTextContents(), ['系统', '夜色', '浅色', '墨色', '纸色', '暮色', '港湾', '苔色']);
   });
 
   test(`${variant}: live choice persists without resetting media, queue, subtitles, or local handles`, async t => {
