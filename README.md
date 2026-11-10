@@ -55,6 +55,18 @@ docker run --rm -p 8080:80 -v ~/Movies:/library/videos:ro ghcr.io/vrsandeep/play
 
 Each folder mounted under `/library` appears in the library at `http://localhost:8080`. To customize, mount a folder containing `player.html.json` and/or `manifest.json` (plus its icons) at `/config`. See [`docker-compose.yml`](docker-compose.yml) for Compose usage, or build from source with `make up` (`docker compose -f docker-compose.dev.yml up --build`).
 
+#### Requiring a login
+The image is open by default. To require a username and password (HTTP Basic authentication), set `AUTH_USERNAME` and `AUTH_PASSWORD`:
+
+```
+docker run --rm -p 8080:80 -v ~/Movies:/library/videos:ro \
+  -e AUTH_USERNAME=me -e AUTH_PASSWORD=secret ghcr.io/vrsandeep/player.html
+```
+
+For several users, mount an [htpasswd](https://httpd.apache.org/docs/current/programs/htpasswd.html) file (`htpasswd -B` or `openssl passwd -apr1` hashes) and point `AUTH_HTPASSWD` at it, e.g. `-v ./htpasswd:/run/secrets/htpasswd:ro -e AUTH_HTPASSWD=/run/secrets/htpasswd`. If only one of `AUTH_USERNAME`/`AUTH_PASSWORD` is set, or the htpasswd file is missing, the container refuses to start.
+
+The browser asks for the login once, then uses it for the player, folder listings, and media. `/manifest.json`, icon files at the root (`/*.png|svg|webp|ico`), and `/healthz` stay public, because browsers fetch app manifests and icons without credentials. Basic authentication sends the password with every request, so put HTTPS (a reverse proxy) in front when exposing the server beyond your network.
+
 ### Use As A Local Media Player (PWA)
 Serve `player.html` from `https://` (or `http://localhost`) and use your browser's "Install" option to install it as an app.
 

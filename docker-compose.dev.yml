@@ -25,4 +25,9 @@ services:
       - ${CONFIG_DIR:-./config}:/config:ro
       # Live-edit the built-in default without rebuilding.
       - ./docker/player.html.json:/opt/player/player.html.json:ro
+    environment:
+      # AUTH_USERNAME=me AUTH_PASSWORD=secret make up
+      AUTH_USERNAME: ${AUTH_USERNAME:-}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+      AUTH_HTPASSWD: ${AUTH_HTPASSWD:-}
     restart: unless-stopped

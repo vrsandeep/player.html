@@ -9,6 +9,10 @@
 #
 #   VIDEO_DIR=~/Movies AUDIO_DIR=~/Music DOCUMENTS_DIR=~/Documents docker compose up -d
 #
+# Require a login:
+#
+#   AUTH_USERNAME=me AUTH_PASSWORD=secret docker compose up -d
+#
 # Customizing: put these in ./config (or point CONFIG_DIR at another folder).
 # Missing files fall back to the built-in defaults. Edits apply on the next page load.
 #
@@ -43,4 +47,14 @@ services:
       #
       # Settings folder (see "Configuration" in the README). An empty folder is fine.
       - ${CONFIG_DIR:-./config}:/config:ro
+      #
+      # For AUTH_HTPASSWD, mount the file, e.g.
+      # - ./htpasswd:/run/secrets/htpasswd:ro
+    environment:
+      # Require a login (HTTP Basic). Leave both empty to serve without a password.
+      # Basic auth sends the password in every request; put HTTPS in front when exposing it.
+      AUTH_USERNAME: ${AUTH_USERNAME:-}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+      # Several users instead: an htpasswd file (htpasswd -B or openssl passwd -apr1).
+      AUTH_HTPASSWD: ${AUTH_HTPASSWD:-}
     restart: unless-stopped
