@@ -55,6 +55,18 @@ docker run --rm -p 8080:80 -v ~/Movies:/library/videos:ro ghcr.io/vrsandeep/play
 
 Each folder mounted under `/library` appears in the library at `http://localhost:8080`. To customize, mount a folder containing `player.html.json` and/or `manifest.json` (plus its icons) at `/config`. See [`docker-compose.yml`](docker-compose.yml) for Compose usage, or build from source with `make up` (`docker compose -f docker-compose.dev.yml up --build`).
 
+#### Requiring a login
+The image is open by default. To require a username and password (HTTP Basic authentication), set `AUTH_USERNAME` and `AUTH_PASSWORD`:
+
+```
+docker run --rm -p 8080:80 -v ~/Movies:/library/videos:ro \
+  -e AUTH_USERNAME=me -e AUTH_PASSWORD=secret ghcr.io/vrsandeep/player.html
+```
+
+For several users, mount an [htpasswd](https://httpd.apache.org/docs/current/programs/htpasswd.html) file (`htpasswd -B` or `openssl passwd -apr1` hashes) and point `AUTH_HTPASSWD` at it, e.g. `-v ./htpasswd:/run/secrets/htpasswd:ro -e AUTH_HTPASSWD=/run/secrets/htpasswd`. If only one of `AUTH_USERNAME`/`AUTH_PASSWORD` is set, or the htpasswd file is missing, the container refuses to start.
+
+The browser asks for the login once, then uses it for the player, folder listings, and media. `/manifest.json`, icon files at the root (`/*.png|svg|webp|ico`), and `/healthz` stay public, because browsers fetch app manifests and icons without credentials. Basic authentication sends the password with every request, so put HTTPS (a reverse proxy) in front when exposing the server beyond your network.
+
 ### Use As A Local Media Player (PWA)
 Serve `player.html` from `https://` (or `http://localhost`) and use your browser's "Install" option to install it as an app.
 
@@ -651,7 +663,7 @@ uv run build.py --watch --dev
 
 ### Browser Tests
 
-After building, run `node --test tests/*.test.cjs` with Playwright available to Node. The tests use installed Chrome on Windows and Playwright Chromium elsewhere. Directory listings and local folder handles are fixtures. The cache regression tests start their own local HTTP servers to exercise the real browser cache, including an old iframe listing after a fetch failure. HTTP directory browsing, search indexing, and folder-to-playlist traversal use fetch with `cache: 'no-store'`. Failed requests do not fall back to potentially cached iframe listings. Local folders continue to use file system handles. The suite does not need an external media server or access to personal files.
+After building, run `make test`. It installs Playwright `1.65.0` (the version CI uses) into `.cache/playwright` when that copy is missing, installs Chromium, and runs `node --test tests/*.test.cjs`. The localization tests invoke `python`. On a machine that only has `python3`, `make test` supplies a `python` command that runs `python3`. The tests use installed Chrome on Windows and Playwright Chromium elsewhere. Directory listings and local folder handles are fixtures. The cache regression tests start their own local HTTP servers to exercise the real browser cache, including an old iframe listing after a fetch failure. HTTP directory browsing, search indexing, and folder-to-playlist traversal use fetch with `cache: 'no-store'`. Failed requests do not fall back to potentially cached iframe listings. Local folders continue to use file system handles. The suite does not need an external media server or access to personal files.
 
 Toggle regression tests exercise both generated builds across device scale factors, CSS zoom levels, font sizes, narrow and desktop viewports, and LTR/RTL locales. They verify symmetric thumb insets, configurable track heights, Turkish label widths, native keyboard behavior, visible focus, and reduced motion. Geometry checks allow subpixel layout rounding rather than requiring identical physical pixels on every display.
 

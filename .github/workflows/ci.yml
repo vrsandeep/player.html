@@ -111,11 +111,29 @@ jobs:
           curl -sS http://localhost:8081/manifest.json | grep -q '"Custom"'
           test "$(curl -sS -o /dev/null -w '%{content_type}' http://localhost:8081/icon.svg)" = image/svg+xml
 
+      - name: Authentication smoke test
+        run: |
+          docker run -d --name player-auth -p 8082:80 \
+            -v "$PWD/videos:/library/videos:ro" \
+            -e AUTH_USERNAME=ci -e 'AUTH_PASSWORD=pa ss$word' \
+            player-html:ci
+          for _ in $(seq 1 30); do curl -fsS -o /dev/null http://localhost:8082/healthz && break; sleep 1; done
+          set -x
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8082/player.html)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8082/videos/)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -u ci:wrong http://localhost:8082/player.html)" = 401
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -u 'ci:pa ss$word' http://localhost:8082/player.html)" = 200
+          curl -sS -u 'ci:pa ss$word' http://localhost:8082/ | grep -q 'href="videos/"'
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://localhost:8082/manifest.json)" = 404
+          # A username without a password must stop the container, not serve it unprotected.
+          ! docker run --rm -e AUTH_USERNAME=ci player-html:ci
+
       - name: Container logs
         if: always()
         run: |
           docker logs player || true
           docker logs player-config || true
+          docker logs player-auth || true
 
   # Kept in this workflow (instead of workflow_run) so publishing waits on the
   # jobs above without the privileged workflow_run trigger.

@@ -6,10 +6,12 @@
 #     -v /path/to/audio:/library/audio:ro \
 #     -v /path/to/documents:/library/documents:ro \
 #     -v /path/to/config:/config:ro \
+#     -e AUTH_USERNAME=me -e AUTH_PASSWORD=secret \
 #     player-html
 #
 # Open http://localhost:8080/ . /library is the library root; each mount is a folder.
 # player.html.json, manifest.json and its icons in /config override the built-in defaults.
+# AUTH_USERNAME/AUTH_PASSWORD (or AUTH_HTPASSWD=/path/to/htpasswd) require a login.
 
 FROM python:3.15-alpine AS build
 
@@ -22,6 +24,9 @@ RUN python build.py ${VERSION:+--version "$VERSION"}
 
 FROM nginx:1.31-alpine
 
+RUN apk add --no-cache openssl
+
+COPY --chmod=755 docker/40-player-auth.sh /docker-entrypoint.d/40-player-auth.sh
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/player.html.json /opt/player/player.html.json
 COPY --from=build /src/dist/player.min.html /opt/player/player.min.html
@@ -32,4 +37,4 @@ RUN mkdir -p /library /config
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -q -O /dev/null http://127.0.0.1/player.html || exit 1
+    CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
