@@ -151,6 +151,7 @@ http://localhost:8080/dist/player.html#url=http://localhost:8080/videos/webm-big
 The player loads and attempts to play the media URL, then best-effort browses the containing folder so the file browser is populated. Folder browsing requires same-origin access or CORS support. If the media URL contains characters such as `#` or `&`, URL-encode the media URL before appending it.
 
 ### UI & Metadata
+* Choose a page theme in Settings, or add one in `src/theme.css`.
 * Select your own theme color with hue+saturation theming (including grayscale themes at `saturation: 0`).
 * Set a custom player poster image from Settings (`Upload`) or by config (`settings.poster-image`).
 * Media file metadata (bitrate, resolution, etc).
@@ -158,6 +159,7 @@ The player loads and attempts to play the media URL, then best-effort browses th
 
 ### Custom Branding
 Use `player.html` with your own look and branding:
+* Page theme via the Theme setting (`settings.theme`) or `src/theme.css`
 * Theme color via hue+saturation controls
 * Custom poster/icon image via upload or config (`settings.poster-image`)
 
@@ -326,6 +328,7 @@ Notes:
 ```json
 {
   "settings": {
+    "theme": "system",
     "hue": 323,
     "saturation": 100,
     "auto-subtitles": false,
@@ -390,6 +393,7 @@ Notes:
 User-facing display and subtitle defaults (most commonly customized):
 
 * `defaultLanguage`: Language to use when none of the browser's preferred languages are supported. Defaults to `en`. See [Languages](#languages) for supported locale codes. This does not override a supported browser language or an explicit user choice.
+* `settings.theme`: Page theme. `system` follows the browser color scheme. Built-in themes are `night`, `light`, `ink`, `paper`, `dusk`, `harbor`, and `moss`. Add one by appending `{ id, scheme }` to `interfaceThemes` in `src/js/app.js` and an `html[data-theme]` block in `src/theme.css`.
 * `settings.hue`: Theme hue (number)
 * `settings.saturation`: Theme saturation from `0` to `100` (use `0` for grayscale themes)
 * The Theme color picker in Settings updates `settings.hue` and `settings.saturation` together.
@@ -628,7 +632,8 @@ ffmpeg -i "input.mkv" -map 0 -c:v copy -c:a ac3 -b:a 640k -map_chapters 0 -movfl
 ```
 
 ## Development
-* `src/player.html` is the dev template (it references `src/styles.css`, `src/js/*`, and `src/svg/*`).
+* `src/player.html` is the dev template (it references `src/styles.css`, `src/theme.css`, `src/js/*`, and `src/svg/*`).
+* `src/theme.css` is the interface sheet: idle player layout, the open-media stage, and page themes. It is inlined after `src/styles.css`.
 * `dist/player.html` and `dist/player.min.html` are generated output; do not edit them by hand.
 
 ### Build

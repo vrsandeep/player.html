@@ -9,7 +9,8 @@ This repo ships a single-file web app. Source is split under `src/` and assemble
 
 ## Key files and folders
 - `src/player.html`: Dev template (references CSS/JS/SVG sources).
-- `src/styles.css`: All styles (inlined at build time).
+- `src/styles.css`: Base styles (inlined at build time).
+- `src/theme.css`: Interface layout and page themes (inlined after the base sheet).
 - `src/js/*.js`: JS modules, inlined in order by the build.
 - `src/svg/*.svg`: SVG sprite pieces, concatenated into `.xlinks`.
 - `src/assets/*`: Binary assets inlined as data URIs at build time.
@@ -42,7 +43,8 @@ This repo ships a single-file web app. Source is split under `src/` and assemble
 - `.xlinks` (inline SVG sprite sheet)
 
 ## CSS architecture
-- Source lives in `src/styles.css`; build inlines it into `<style primary>`.
+- Base styles live in `src/styles.css`; build inlines them into `<style primary>`.
+- Interface layout and named page themes live in `src/theme.css`, inlined after the base sheet. A theme is `html[data-theme="..."]` plus a matching Settings option.
 - Heavy use of CSS custom properties for theme and sizing:
   - `--theme-hue`, `--theme-color`, `--tile-*`, `--progress-bar-*`, etc.
   - Light/dark values set via `data-color-scheme` and `prefers-color-scheme`.
@@ -162,6 +164,10 @@ Thumbnail cache:
   - Add `<button>` in `.controls` (HTML).
   - Add icon in `.xlinks` SVG sprite (if needed).
   - Wire handler in `setupPrimaryControls()` and update CSS for states.
+- Add a page theme:
+  - Append `{ id, scheme }` to `interfaceThemes` in `src/js/app.js`. `scheme` is `dark` or `light`.
+  - Add `html[data-theme="id"]` in `src/theme.css` with `--color-page`, `--color-text`, and `--color-text-muted`.
+  - Translate it with `settings.theme.<id>` in the locale catalogs, or set `label` on the registry entry to show that text in every language.
 - Add a new setting:
   - Add a `settings.<key>` entry (label/desc/default/get/set/update).
   - If it changes styling, add a class or CSS var and apply it in CSS.

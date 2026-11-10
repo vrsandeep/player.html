@@ -11,7 +11,9 @@
   <link rel='shortcut icon'
     href='./assets/favicon.png' />
   <link rel='stylesheet' href='./styles.css' />
+  <link rel='stylesheet' href='./theme.css' />
   <style type='text/css' primary data-inline='./styles.css'></style>
+  <style type='text/css' data-inline='./theme.css'></style>
 </head>
 <body class='no-subtitles is-stopped'>
   <div class='player-container'>
@@ -44,12 +46,15 @@
           <svg class='loop-on'><use xlink:href='#svg-loop-on'/></svg>
           <svg class='loop-off'><use xlink:href='#svg-loop-off'/></svg>
         </button>
-        <button class='btn-volume' type='button' data-i18n-title='ui.adjust-audio-volume' title='Adjust audio volume' data-i18n-aria-label='ui.adjust-audio-volume' aria-label='Adjust audio volume'>
-          <svg class='level-0' data-i18n-title="ui.muted" title="Muted"><use xlink:href='#svg-speaker-volume-0'/></svg>
-          <svg class='level-1' data-i18n-title="ui.volume-33" title="Volume 33%"><use xlink:href='#svg-speaker-volume-1'/></svg>
-          <svg class='level-2' data-i18n-title="ui.volume-66" title="Volume 66%"><use xlink:href='#svg-speaker-volume-2'/></svg>
-          <svg class='level-3' data-i18n-title="ui.volume-100" title="Volume 100%"><use xlink:href='#svg-speaker-volume-3'/></svg>
-        </button>
+        <span class='volume-control'>
+          <button class='btn-volume' type='button' data-i18n-title='ui.adjust-audio-volume' title='Adjust audio volume' data-i18n-aria-label='ui.adjust-audio-volume' aria-label='Adjust audio volume'>
+            <svg class='level-0' data-i18n-title="ui.muted" title="Muted"><use xlink:href='#svg-speaker-volume-0'/></svg>
+            <svg class='level-1' data-i18n-title="ui.volume-33" title="Volume 33%"><use xlink:href='#svg-speaker-volume-1'/></svg>
+            <svg class='level-2' data-i18n-title="ui.volume-66" title="Volume 66%"><use xlink:href='#svg-speaker-volume-2'/></svg>
+            <svg class='level-3' data-i18n-title="ui.volume-100" title="Volume 100%"><use xlink:href='#svg-speaker-volume-3'/></svg>
+          </button>
+          <input class='volume-bar' type='range' min='0' max='1' step='0.01' value='1' data-i18n-aria-label='ui.adjust-audio-volume' aria-label='Adjust audio volume' aria-valuemin='0' aria-valuemax='100' aria-valuenow='100' aria-valuetext='100%'>
+        </span>
         <button class='btn-playback-rate' type='button' data-i18n-title='ui.alter-media-playback-rate' title='Alter media playback rate' data-i18n-aria-label='ui.change-playback-rate' aria-label='Change playback rate' style='--playback-rate: "1.00"'><svg><use xlink:href='#svg-circle'/></svg></button>
         <button class='btn-fullscreen' type='button' data-i18n-title='ui.toggle-fullscreen-mode' title='Toogle fullscreen mode' data-i18n-aria-label='ui.toggle-fullscreen' aria-label='Toggle fullscreen' aria-pressed='false'><svg class='collapse'><use xlink:href='#svg-collapse'/></svg><svg class='expand'><use xlink:href='#svg-expand'/></svg></button>
         <button class='btn-pip' type='button' data-i18n-title='ui.toggle-picture-in-picture-mode' title='Toggle picture-in-picture mode' data-i18n-aria-label='ui.toggle-picture-in-picture' aria-label='Toggle picture-in-picture' aria-pressed='false'><svg class='exit'><use xlink:href='#svg-pip-exit-regular'/></svg><svg class='enter'><use xlink:href='#svg-pip-enter-regular'/></svg></button>

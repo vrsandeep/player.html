@@ -4315,19 +4315,28 @@
       }
     }
 
-    const actionVolume = () => {
-      let volume = +$player.dataset.volume;
-      if (volume === 3) {
-        volume = 0;
-      } else {
-        volume += 1;
+    let lastAudibleVolume = 1;
+    const volumeExponent = () => (typeof app.options.volumeExponent === 'number' ? app.options.volumeExponent : 1.8);
+    const volumeLevelFor = (ui) => (ui <= 0 ? 0 : (ui <= 0.33 ? 1 : (ui <= 0.66 ? 2 : 3)));
+    const setVolumeUi = (ui, remember = true) => {
+      const level = minmax(0, Number(ui) || 0, 1);
+      if (remember && level > 0) lastAudibleVolume = level;
+      $player.dataset.volume = volumeLevelFor(level);
+      const $bar = $('.volume-bar');
+      if ($bar) {
+        $bar.value = String(level);
+        $bar.style.setProperty('--volume-percent', `${level * 100}%`);
+        const percent = Math.round(level * 100);
+        $bar.setAttribute('aria-valuenow', String(percent));
+        $bar.setAttribute('aria-valuetext', `${percent}%`);
       }
-      $player.dataset.volume = volume;
+      $player.volume = (level === 0 ? 0 : Math.pow(level, volumeExponent()));
+      updateVolume();
+    }
 
-      const maxVolumeStep = 3;
-      const uiValue = (volume === 0 ? 0 : (volume / maxVolumeStep)); // 0..1
-      const exponent = (typeof app.options.volumeExponent === 'number' ? app.options.volumeExponent : 1.8);
-      $player.volume = (uiValue === 0 ? 0 : Math.pow(uiValue, exponent));
+    const actionVolume = () => {
+      const current = Number($('.volume-bar')?.value ?? 1);
+      setVolumeUi(current > 0 ? 0 : (lastAudibleVolume || 1), false);
     }
 
     const updateVolume = () => {
@@ -4589,6 +4598,7 @@
           $body.addClass('no-volume');
         } else {
           $body.removeClass('no-volume');
+          setVolumeUi(1);
         }
       }, 1);
     }
@@ -4655,15 +4665,16 @@
 
 
     var timeoutFadeout;
-    $playerContainer.on('mousemove', async () => {
+    const scheduleControlsFade = () => {
       const c = 'fadeout';
       $playerContainer.removeClass(c);
-
       clearTimeout(timeoutFadeout);
       timeoutFadeout = setTimeout(() => {
+        if (!$body.hasClass('is-playing')) return;
         $playerContainer.addClass(c);
       }, 3000);
-    });
+    };
+    $playerContainer.on('mousemove', scheduleControlsFade);
 
     /* Progress bar */
     const getPointerClientX = (e) => {
@@ -5031,6 +5042,7 @@
       $('.btn-next').on('click', playNextTrack);
       $('.btn-loop').on('click', togglePlaylistLoop);
       $('.btn-volume').on('click', actionVolume);
+      $('.volume-bar').on('input', (e) => setVolumeUi(e.target.value));
       delay(10, updateVolume);
 
       $('.btn-onedrive').on('click', openFromCloud('onedrive'));
@@ -5108,6 +5120,7 @@
       });
       $player.on('play',  () => {
         updatePlaybackState('play');
+        scheduleControlsFade();
         markAutoSubtitlePlaybackStarted();
         if ($body.hasClass('is-audio')) schedulePlayerArtworkBackground($player.currentSrc);
         maybeAutoLoadSubtitles();
@@ -5389,7 +5402,7 @@
     const generalSettingSections = [
       {
         label: "settings.section.interface",
-        keys: ['language', 'hue', 'blur', 'transitions', 'poster-upload', 'poster-reset']
+        keys: ['language', 'theme', 'hue', 'blur', 'transitions', 'poster-upload', 'poster-reset']
       },
       {
         label: "settings.section.playback",
@@ -5586,6 +5599,42 @@
     };
     checkIncorrectDefaultHue();
 
+    // scheme picks the shared tokens in src/theme.css. label, when set, is shown as-is.
+    const interfaceThemes = [
+      { id: 'system', scheme: 'system' },
+      { id: 'night', scheme: 'dark' },
+      { id: 'light', scheme: 'light' },
+      { id: 'ink', scheme: 'dark' },
+      { id: 'paper', scheme: 'light' },
+      { id: 'dusk', scheme: 'dark' },
+      { id: 'harbor', scheme: 'dark' },
+      { id: 'moss', scheme: 'dark' }
+    ];
+    const interfaceThemeById = new Map(interfaceThemes.map((theme) => [theme.id, theme]));
+    const normalizeInterfaceTheme = (value, fallback = 'system') => {
+      const theme = String(value ?? '').trim().toLowerCase();
+      return interfaceThemeById.has(theme) ? theme : fallback;
+    };
+    const getInterfaceThemeDefault = () => normalizeInterfaceTheme(getOptionSettingDefault('theme', 'system'), 'system');
+    const clearInterfaceTheme = () => {
+      try { delete $html.dataset.theme; } catch (e) {}
+      try { delete $html.dataset.colorScheme; } catch (e) {}
+    };
+    const applyInterfaceTheme = (value) => {
+      const theme = interfaceThemeById.get(normalizeInterfaceTheme(value, 'system'));
+      if (!theme || theme.scheme === 'system') {
+        clearInterfaceTheme();
+        return;
+      }
+      $html.dataset.theme = theme.id;
+      $html.dataset.colorScheme = theme.scheme;
+    };
+    const interfaceThemeOption = (theme) => (
+      theme.label
+        ? { value: theme.id, label: theme.label, native: true }
+        : { value: theme.id, label: `settings.theme.${theme.id}` }
+    );
+
     const settings = {
       language: {
         label: 'settings.language.label',
@@ -5600,6 +5649,26 @@
           i18n.setLanguage(value);
         },
         update: () => settings.language.set($('.setting-language').value)
+      },
+      theme: {
+        label: 'settings.theme.label',
+        desc: 'settings.theme.desc',
+        type: 'select',
+        event: 'change',
+        default: 'system',
+        options: interfaceThemes.map(interfaceThemeOption),
+        get: () => normalizeInterfaceTheme(retrieveSetting('theme'), settings.theme.default),
+        set: (val) => {
+          const theme = normalizeInterfaceTheme(val, settings.theme.default);
+          persistSetting('theme', theme);
+          applyInterfaceTheme(theme);
+        },
+        update: () => {
+          const $el = $('.setting-theme');
+          const val = normalizeInterfaceTheme($el.value, settings.theme.default);
+          $el.value = val;
+          settings.theme.set(val);
+        }
       },
       hue: {
         label: "settings.hue.label",
@@ -6021,6 +6090,7 @@
     }
 
     const refreshSettingDefaultsFromOptions = () => {
+      settings.theme.default = getInterfaceThemeDefault();
       settings.hue.default = getThemeHueDefault();
       settings.saturation.default = getThemeSaturationDefault();
       settings.blur.default = normalizeBooleanSetting(getOptionSettingDefault('blur', true), true);

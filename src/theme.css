@@ -1,0 +1,259 @@
+/*
+  Interface layout and page themes. Inlined after src/styles.css.
+  A new theme is an interfaceThemes entry in src/js/app.js plus one html[data-theme] block below.
+*/
+
+.settings.modal {
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+}
+
+.settings.show ~ .modal-background-overlay {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+/* No media loaded: keep the control bar and drop the empty stage. */
+body:not(.is-loaded) .media-container {
+  display: none;
+}
+
+body:not(.is-loaded) .controls {
+  padding-block: 0.65rem;
+}
+
+/* Open media: 16:9 stage, controls drawn over the picture. */
+body {
+  --stage-max-height: 72vh;
+  --stage-aspect: calc(16 / 9);
+}
+
+body.is-audio {
+  --stage-max-height: 40vh;
+  --stage-aspect: 2.2;
+}
+
+body.is-loaded .player-container {
+  display: block;
+  width: min(100%, calc(var(--stage-max-height) * var(--stage-aspect)));
+  margin-inline: auto;
+}
+
+body.is-loaded .media-container {
+  width: 100%;
+  aspect-ratio: var(--stage-aspect);
+  max-height: var(--stage-max-height);
+  margin-inline: auto;
+  background: #000;
+}
+
+body.is-loaded .player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  object-fit: contain;
+}
+
+body.is-loaded:not(.is-audio) .player {
+  background-color: #000;
+  background-image: none;
+}
+
+body.is-loaded .media-title {
+  z-index: 4;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Wide screens draw the controls over the picture. Narrow screens keep the bar below it. */
+@media (min-width: 651px) {
+  body.is-loaded .controls {
+    --control-fg: hsl(var(--theme-hue), var(--sat-strong), 86%);
+    --control-fg-hover: #fff;
+    --control-fg-active: #fff;
+    --color-text: #fff;
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 5;
+    margin: 0;
+    padding: 2.5rem 0.85rem 0.75rem;
+    color: #fff;
+    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.78));
+    border: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  body.is-loaded .controls .btn-playback-rate,
+  body.is-loaded .controls .btn-playback-rate:hover,
+  body.is-loaded .controls .btn-playback-rate:focus-visible,
+  body.is-loaded .controls .btn-playback-rate:active {
+    color: var(--accent);
+  }
+
+  body.is-loaded .controls .btn-playback-rate:after,
+  body.is-loaded .controls .btn-playback-rate:hover:after,
+  body.is-loaded .controls .btn-playback-rate:focus-visible:after,
+  body.is-loaded .controls .btn-playback-rate:active:after {
+    color: var(--text-on-accent);
+    text-shadow: none;
+  }
+
+  body.is-loaded .trick-container {
+    top: auto;
+    bottom: calc(100% + var(--trick-gap));
+    border-radius: 1rem 1rem 0 0;
+  }
+
+  body.is-loaded .trick-container:after {
+    top: auto;
+    bottom: 0;
+    background-image: linear-gradient(to top, #000, transparent);
+  }
+
+  body.is-loaded.is-playing .player-container.fadeout .controls,
+  body.is-loaded.is-playing .player-container.fadeout .media-title {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+/* Fullscreen fills the screen. These two rules stay split so Firefox applies them. */
+body.is-loaded .player-container:-webkit-full-screen {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body.is-loaded .player-container:fullscreen {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body.is-loaded .player-container:-webkit-full-screen .media-container {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+body.is-loaded .player-container:fullscreen .media-container {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+}
+
+/* Shared control tokens. A theme's scheme selects one of these. */
+html[data-color-scheme="dark"] {
+  color-scheme: dark;
+  --color-danger: #ffb4ab;
+  --color-border-subtle: rgba(255, 255, 255, 0.2);
+  --color-surface-quiet: rgba(255, 255, 255, 0.08);
+  --color-surface-quiet-hover: rgba(255, 255, 255, 0.16);
+  --color-surface-quiet-active: rgba(255, 255, 255, 0.24);
+  --theme-accent-active: hsl(var(--theme-hue), var(--sat-strong), 44%);
+  --control-fg: hsl(var(--theme-hue), var(--sat-strong), 64%);
+  --control-fg-hover: #ffffff;
+  --control-fg-active: hsl(var(--theme-hue), var(--sat-strong), 82%);
+  --control-fg-disabled: rgba(255, 255, 255, 0.44);
+  --control-bg-hover: color-mix(in srgb, var(--theme-accent) 36%, rgba(255, 255, 255, 0.12));
+  --control-bg-active: color-mix(in srgb, var(--theme-accent) 46%, rgba(0, 0, 0, 0.18));
+  --button-secondary-bg: rgba(255, 255, 255, 0.18);
+  --button-secondary-bg-hover: rgba(255, 255, 255, 0.26);
+  --button-secondary-bg-active: rgba(255, 255, 255, 0.34);
+  --button-secondary-border: rgba(255, 255, 255, 0.24);
+  --glass-surface: color-mix(in srgb, var(--color-page) 78%, transparent);
+  --glass-surface-strong: color-mix(in srgb, var(--color-page) 64%, rgba(255, 255, 255, 0.08));
+  --glass-pane: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-border-strong: color-mix(in srgb, var(--theme-accent) 44%, rgba(255, 255, 255, 0.18));
+  --modal-surface: var(--glass-surface);
+  --modal-item-surface: var(--glass-pane);
+  --tile-surface: var(--glass-surface-strong);
+}
+
+html[data-color-scheme="light"] {
+  color-scheme: light;
+  --color-danger: #b42318;
+  --color-border-subtle: rgba(0, 0, 0, 0.2);
+  --color-surface-quiet: rgba(0, 0, 0, 0.08);
+  --color-surface-quiet-hover: rgba(0, 0, 0, 0.14);
+  --color-surface-quiet-active: rgba(0, 0, 0, 0.22);
+  --theme-accent-active: hsl(var(--theme-hue), var(--sat-strong), 36%);
+  --control-fg: hsl(var(--theme-hue), var(--sat-strong), 34%);
+  --control-fg-hover: hsl(var(--theme-hue), var(--sat-strong), 18%);
+  --control-fg-active: hsl(var(--theme-hue), var(--sat-strong), 13%);
+  --control-fg-disabled: rgba(0, 0, 0, 0.36);
+  --control-bg-hover: color-mix(in srgb, var(--accent) 16%, rgba(255, 255, 255, 0.72));
+  --control-bg-active: color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.64));
+  --button-secondary-bg: rgba(0, 0, 0, 0.08);
+  --button-secondary-bg-hover: rgba(0, 0, 0, 0.14);
+  --button-secondary-bg-active: rgba(0, 0, 0, 0.22);
+  --button-secondary-border: rgba(0, 0, 0, 0.18);
+  --glass-surface: rgba(255, 255, 255, 0.62);
+  --glass-surface-strong: rgba(255, 255, 255, 0.72);
+  --glass-pane: rgba(255, 255, 255, 0.46);
+  --glass-border: rgba(0, 0, 0, 0.16);
+  --glass-border-strong: color-mix(in srgb, var(--accent) 36%, rgba(0, 0, 0, 0.18));
+  --modal-surface: var(--glass-surface);
+  --modal-item-surface: var(--glass-pane);
+  --tile-surface: var(--glass-surface-strong);
+}
+
+/* Page themes. One block per interfaceThemes entry, aside from system. */
+html[data-theme="night"] {
+  --color-page: #0a0b0e;
+  --color-text: #f5f7fa;
+  --color-text-muted: #c7ccd4;
+}
+
+html[data-theme="ink"] {
+  --color-page: #05060a;
+  --color-text: #f5f7fa;
+  --color-text-muted: #9aa3b2;
+}
+
+html[data-theme="dusk"] {
+  --color-page: #1a1420;
+  --color-text: #f6f1f8;
+  --color-text-muted: #cbbdd2;
+}
+
+html[data-theme="harbor"] {
+  --color-page: #0d1b24;
+  --color-text: #e7f2f6;
+  --color-text-muted: #a9c3ce;
+}
+
+html[data-theme="moss"] {
+  --color-page: #101610;
+  --color-text: #eef3ea;
+  --color-text-muted: #b7c4ae;
+}
+
+html[data-theme="light"] {
+  --color-page: #f8f9fb;
+  --color-text: #111111;
+  --color-text-muted: #3a3a3a;
+}
+
+html[data-theme="paper"] {
+  --color-page: #f6f1e7;
+  --color-text: #2a241c;
+  --color-text-muted: #5c5348;
+}
