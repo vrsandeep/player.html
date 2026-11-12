@@ -12,7 +12,7 @@ PLAYWRIGHT_DIR ?= .cache/playwright
 export VIDEO_DIR AUDIO_DIR DOCUMENTS_DIR CONFIG_DIR AUTH_USERNAME AUTH_PASSWORD AUTH_HTPASSWD
 
 .DEFAULT_GOAL := help
-.PHONY: help build up down restart logs ps open test
+.PHONY: help dist build up down restart logs ps open test
 
 help: ## Show available targets
 	@awk 'BEGIN { FS = ":.*## " } /^[a-z-]+:.*## / { printf "  make %-8s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -31,6 +31,9 @@ logs: ## Follow container logs
 
 ps: ## Show container status
 	$(COMPOSE) ps
+
+dist: ## Rebuild dist/player.html and dist/player.min.html
+	@if command -v python >/dev/null 2>&1; then python build.py; else python3 build.py; fi
 
 test: ## Run the browser tests
 	@mkdir -p $(PLAYWRIGHT_DIR) .cache/bin

@@ -292,12 +292,11 @@
       return re.test(url);
     }
 
-    const documentKinds = { pdf: 'pdf', txt: 'text', html: 'html', htm: 'html', xhtml: 'html' };
-    const documentExtensions = Object.keys(documentKinds);
+    const documentExtensions = documentThumbnail.extensions;
     // Opened by the browser's own viewer, so `local://` session URLs cannot be used.
     const getDocumentKind = (url) => {
       const cleanUrl = String(url || '').split('#')[0].split('?')[0];
-      const kind = documentKinds[(/\.([^./]+)$/.exec(cleanUrl)?.[1] || '').toLowerCase()];
+      const kind = documentThumbnail.kind(cleanUrl);
       if (!kind || isLocalUrl(cleanUrl)) return '';
       return resolveUrl(cleanUrl) === `${window.location.origin}${window.location.pathname}` ? '' : kind;
     }
@@ -6696,70 +6695,6 @@
 
     const hasPreRenderedThumbnail = (node) => node.style.getPropertyValue('--image-url-0').length > ('url(http://)').length;
 
-    const textPreviewBytes = 4096;
-
-    // Servers may ignore Range, so stop reading once the preview is full.
-    const readTextPreview = async (url) => {
-      const response = await fetch(url, { headers: { Range: `bytes=0-${textPreviewBytes - 1}` } });
-      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
-      const reader = response.body.getReader();
-      const bytes = new Uint8Array(textPreviewBytes);
-      let size = 0;
-      while (size < textPreviewBytes) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = value.subarray(0, textPreviewBytes - size);
-        bytes.set(chunk, size);
-        size += chunk.length;
-      }
-      reader.cancel().catch(() => {});
-      return new TextDecoder().decode(bytes.subarray(0, size));
-    }
-
-    const renderTextThumbnail = (text) => {
-      const thumbnailOpts = app.options.thumbnails;
-      const width = (thumbnailOpts.size || 320) * 2;
-      const height = Math.round(width * 9 / 16);
-      const fontSize = Math.round(width / 40);
-      const lineHeight = Math.round(fontSize * 1.4);
-      const padding = fontSize;
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fbfbf8';
-      ctx.fillRect(0, 0, width, height);
-      ctx.fillStyle = '#26262b';
-      ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-      ctx.textBaseline = 'top';
-
-      const maxChars = Math.max(1, Math.floor((width - padding * 2) / ctx.measureText('M').width));
-      const maxLines = Math.floor((height - padding) / lineHeight);
-      const lines = [];
-      for (const line of text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n')) {
-        for (let i = 0; i === 0 || i < line.length; i += maxChars) lines.push(line.slice(i, i + maxChars));
-        if (lines.length >= maxLines) break;
-      }
-      lines.slice(0, maxLines).forEach((line, i) => ctx.fillText(line, padding, padding + i * lineHeight));
-
-      // Text needs a higher quality than video frames to stay legible.
-      const mime = thumbnailOpts.mime || {};
-      return new Promise((resolve) => canvas.toBlob(resolve, mime.type || 'image/webp', Math.max(mime.quality || 0, 0.7)));
-    }
-
-    const setHtmlPreview = (node, url) => {
-      if (node.querySelector('.document-preview')) return;
-      const frame = document.createElement('iframe');
-      frame.className = 'document-preview';
-      frame.setAttribute('sandbox', '');
-      frame.setAttribute('loading', 'lazy');
-      frame.setAttribute('scrolling', 'no');
-      frame.setAttribute('tabindex', '-1');
-      frame.setAttribute('aria-hidden', 'true');
-      frame.src = url;
-      node.prepend(frame);
-    }
-
     const setTextThumbnail = async (node, url) => {
       const cacheKey = getThumbnailCacheKey(url, 'text', [0]);
       await migrateThumbnailLocalStorageCache();
@@ -6768,7 +6703,13 @@
         return;
       }
       try {
-        const blob = await renderTextThumbnail(await readTextPreview(url));
+        const thumbnailOpts = app.options.thumbnails || {};
+        const result = await documentThumbnail(url, {
+          kind: 'text',
+          size: thumbnailOpts.size,
+          mime: thumbnailOpts.mime
+        });
+        const blob = result && result.blob;
         if (!blob || !node.isConnected) return;
         node.style.setProperty('--image-url-0', `url('${escapeCssUrl(createThumbnailObjectUrl(blob))}')`);
         await writeThumbnailCache(cacheKey, [{ blob, size: blob.size, mime: blob.type }]);
@@ -6778,11 +6719,16 @@
       }
     }
 
-    const setDocumentThumbnail = async (node, url) => {
+    const setDocumentThumbnail = (node, url) => {
       if (hasPreRenderedThumbnail(node)) return;
       const kind = getDocumentKind(url);
-      if (kind === 'html') setHtmlPreview(node, url);
-      else if (kind === 'text') await setTextThumbnail(node, url);
+      if (kind === 'html') {
+        if (node.querySelector('.document-preview')) return;
+        const result = documentThumbnail(url, { kind: 'html' });
+        if (result && result.element) node.prepend(result.element);
+      } else if (kind === 'text') {
+        return setTextThumbnail(node, url);
+      }
     }
 
     const setThumbnail = async (node, url) => {
