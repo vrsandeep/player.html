@@ -87,7 +87,7 @@
     "settings.transitions.label": "界面过渡动画",
     "settings.transitions.desc": "启用或禁用界面过渡动画",
     "settings.auto-subtitles.label": "自动加载匹配的字幕",
-    "settings.auto-subtitles.desc": "自动加载与视频文件同名的字幕文件（例如 .vtt 或 .srt）。",
+    "settings.auto-subtitles.desc": "自动加载与视频同名的字幕文件，包括 video.en.srt 这类带语言代码的文件名。",
     "settings.subtitle-font.label": "字幕字体",
     "settings.subtitle-font.desc": "设置字幕字体。",
     "settings.subtitle-size.label": "字幕大小",

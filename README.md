@@ -397,7 +397,7 @@ User-facing display and subtitle defaults (most commonly customized):
 * `settings.hue`: Theme hue (number)
 * `settings.saturation`: Theme saturation from `0` to `100` (use `0` for grayscale themes)
 * The Theme color picker in Settings updates `settings.hue` and `settings.saturation` together.
-* `settings.auto-subtitles`: Auto-load matching subtitle file (`true`/`false`)
+* `settings.auto-subtitles`: Auto-load a subtitle that shares the video filename (`video.srt`) or adds a language code (`video.en.srt`, `video.eng.vtt`) (`true`/`false`)
 * `settings.subtitle-font`: `sans`, `serif`, `mono`, `casual`
 * `settings.subtitle-size`: Percentage string. Presets in UI: `50%`, `75%`, `100%`, `150%`, `200%`. Arbitrary percentages are accepted (clamped to `25%`-`400%`).
 * `settings.subtitle-position`: `author`, `90`, `75`, `60`, `35`, `20`

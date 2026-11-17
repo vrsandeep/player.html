@@ -76,7 +76,7 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
       return getAll.apply(this, args);
     };
   }, { records, origin });
-  const exports = 'window.__playerTest = { libraryState, hashState, settings, searchState, openLocation, refreshSearchIndex, registerLocalFolder, createLocalLinks, getLocalSession, localObjectUrls, localObjectUrlMetadata, getWatchHistoryRecords, getWatchHistoryId, getLocalFileHistoryId, sanitizeRestoredHash, requestFolderLinks, addFolderToPlaylist, setPlaylistFromUrls, playPlaylistIndex, getMediaUrl, renderLibraryView, putThumbnailCacheRecord, readThumbnailCache, applyThumbnailCacheItems, pruneThumbnailCache, runThumbnailCacheStore, idbRequest, getThumbnailCacheKey, populateThumbnails, writeWatchHistory, actionOpenLocalFileFallback }; Promise.resolve(window.__seedHistory).then(main);';
+  const exports = 'window.__playerTest = { libraryState, hashState, settings, searchState, openLocation, refreshSearchIndex, registerLocalFolder, createLocalLinks, getLocalSession, localObjectUrls, localObjectUrlMetadata, getWatchHistoryRecords, getWatchHistoryId, getLocalFileHistoryId, sanitizeRestoredHash, requestFolderLinks, addFolderToPlaylist, setPlaylistFromUrls, playPlaylistIndex, getMediaUrl, renderLibraryView, putThumbnailCacheRecord, readThumbnailCache, applyThumbnailCacheItems, pruneThumbnailCache, runThumbnailCacheStore, idbRequest, getThumbnailCacheKey, populateThumbnails, writeWatchHistory, actionOpenLocalFileFallback, getMatchingSubtitleUrl }; Promise.resolve(window.__seedHistory).then(main);';
   const html = fs.readFileSync(path.join(project, 'dist', variant), 'utf8').replace(/\bmain\(\);(?=\s*<\/script>)/, exports);
   assert.ok(html.includes('window.__playerTest ='), 'Test instrumentation must match the built app');
   await context.route('**/*', async route => {
@@ -939,6 +939,28 @@ test('unplayable looped queues stop after one failed pass and allow a manual ret
   await page.waitForFunction(() => app.playlistIndex === 1 && !window.__playerTest.getMediaUrl());
   assert.ok(mediaRequests.length > firstPass);
   assert.equal(await page.locator('body').evaluate(el => el.classList.contains('is-stopped')), true);
+});
+
+test('auto-load matches the video filename and language-coded subtitle names', async t => {
+  const { page } = await openPlayer(t);
+  const media = `${root}Episode 1.mp4`;
+  const pick = (files, locale) => page.evaluate(({ media, files, locale }) => {
+    if (locale) window.i18n.setLanguage(locale);
+    window.app.links.files = files.map(url => ({ url }));
+    return window.__playerTest.getMatchingSubtitleUrl(media);
+  }, { media, files, locale });
+  const file = name => `${root}${name}`;
+  assert.equal(await pick([file('Episode 1.srt')]), file('Episode 1.srt'));
+  assert.equal(await pick([file('Episode 1.srt'), file('Episode 1.vtt')]), file('Episode 1.vtt'));
+  assert.equal(await pick([file('Episode 1.SRT')]), file('Episode 1.SRT'));
+  assert.equal(await pick([file('Episode 1.en.srt'), file('Other.srt')]), file('Episode 1.en.srt'));
+  assert.equal(await pick([file('Episode 1.eng.vtt'), file('Episode 1.fr.srt')]), file('Episode 1.eng.vtt'));
+  assert.equal(await pick([file('Episode 1.ja.srt'), file('Episode 1.srt')], 'ja'), file('Episode 1.ja.srt'));
+  assert.equal(await pick([file('Episode 1.ja.srt'), file('Episode 1.srt')], 'fr'), file('Episode 1.srt'));
+  assert.equal(await pick([file('Episode 1.zh-Hans.vtt'), file('Episode 1.zh.srt'), file('Episode 1.en.srt')], 'zh-Hans'), file('Episode 1.zh-Hans.vtt'));
+  assert.equal(await pick([file('Episode 1.extra.srt')]), null);
+  assert.equal(await pick([file('Episode 1.en.srt?download=1')]), file('Episode 1.en.srt?download=1'));
+  assert.equal(await page.evaluate(url => window.__playerTest.getMatchingSubtitleUrl(url), `${root}Audio track.mp3`), null);
 });
 
 test('transport controls sit below the picture on a narrow screen and over it on a wide one', async t => {

@@ -96,7 +96,7 @@
     "settings.transitions.label": "Interfaceovergangen",
     "settings.transitions.desc": "Geanimeerde overgangen in de interface in- of uitschakelen",
     "settings.auto-subtitles.label": "Passende ondertiteling laden",
-    "settings.auto-subtitles.desc": "Automatisch een ondertitelbestand met dezelfde naam als de video laden, zoals .vtt of .srt.",
+    "settings.auto-subtitles.desc": "Automatisch een ondertitelbestand met dezelfde naam als de video laden, ook met een taalcode zoals video.en.srt.",
     "settings.subtitle-font.label": "Ondertitellettertype",
     "settings.subtitle-font.desc": "Het lettertype van de ondertiteling instellen.",
     "settings.subtitle-size.label": "Ondertitelgrootte",

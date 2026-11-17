@@ -93,7 +93,7 @@
     "settings.transitions.label": "UIの切り替え効果",
     "settings.transitions.desc": "UIのトランジションアニメーションを有効または無効にします",
     "settings.auto-subtitles.label": "同名の字幕を自動読み込み",
-    "settings.auto-subtitles.desc": "動画と同じ名前の.vttや.srtなどの字幕ファイルを自動で読み込みます。",
+    "settings.auto-subtitles.desc": "動画と同じ名前の字幕ファイルを自動で読み込みます。video.en.srt のような言語コード付きの名前も含みます。",
     "settings.subtitle-font.label": "字幕フォント",
     "settings.subtitle-font.desc": "字幕のフォントを設定します。",
     "settings.subtitle-size.label": "字幕サイズ",

@@ -102,7 +102,7 @@
     "settings.transitions.label": "Przejścia interfejsu",
     "settings.transitions.desc": "Włącz lub wyłącz animowane przejścia interfejsu",
     "settings.auto-subtitles.label": "Ładuj pasujące napisy",
-    "settings.auto-subtitles.desc": "Automatycznie załaduj plik napisów o tej samej nazwie co film, np. .vtt lub .srt.",
+    "settings.auto-subtitles.desc": "Automatycznie załaduj plik napisów o tej samej nazwie co film, także z kodem języka, np. video.en.srt.",
     "settings.subtitle-font.label": "Czcionka napisów",
     "settings.subtitle-font.desc": "Ustaw krój czcionki napisów.",
     "settings.subtitle-size.label": "Rozmiar napisów",

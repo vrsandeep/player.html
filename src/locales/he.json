@@ -87,7 +87,7 @@
     "settings.transitions.label": "מעברים בממשק",
     "settings.transitions.desc": "הפעלה או כיבוי של מעברים מונפשים בממשק",
     "settings.auto-subtitles.label": "טעינת כתוביות מתאימות אוטומטית",
-    "settings.auto-subtitles.desc": "טעינה אוטומטית של קובץ כתוביות ששמו זהה לשם הסרטון, כגון .vtt או .srt.",
+    "settings.auto-subtitles.desc": "טעינה אוטומטית של קובץ כתוביות ששמו זהה לשם הסרטון, כולל שמות עם קוד שפה כגון video.en.srt.",
     "settings.subtitle-font.label": "גופן הכתוביות",
     "settings.subtitle-font.desc": "הגדרת משפחת הגופן של הכתוביות.",
     "settings.subtitle-size.label": "גודל הכתוביות",

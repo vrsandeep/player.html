@@ -99,7 +99,7 @@
     "settings.transitions.label": "Transições da interface",
     "settings.transitions.desc": "Ativar ou desativar as transições animadas da interface",
     "settings.auto-subtitles.label": "Carregar legendas correspondentes",
-    "settings.auto-subtitles.desc": "Carregar automaticamente uma legenda com o mesmo nome do vídeo, por exemplo .vtt ou .srt.",
+    "settings.auto-subtitles.desc": "Carregar automaticamente uma legenda com o mesmo nome do vídeo, incluindo nomes com código de idioma como video.en.srt.",
     "settings.subtitle-font.label": "Fonte das legendas",
     "settings.subtitle-font.desc": "Definir a família da fonte das legendas.",
     "settings.subtitle-size.label": "Tamanho das legendas",

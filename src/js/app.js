@@ -3890,18 +3890,83 @@
       if (mediaUrl) autoSubtitlePlaybackStartedFor = mediaUrl;
     }
 
+    const subtitleLanguageAliases = {
+      eng: 'en', fre: 'fr', fra: 'fr', deu: 'de', ger: 'de', spa: 'es', por: 'pt',
+      jpn: 'ja', kor: 'ko', zho: 'zh', chi: 'zh', ara: 'ar', hin: 'hi', ita: 'it',
+      nld: 'nl', dut: 'nl', pol: 'pl', fas: 'fa', per: 'fa', heb: 'he', tur: 'tr',
+      rus: 'ru', ukr: 'uk', swe: 'sv', nor: 'no', dan: 'da', fin: 'fi', ell: 'el',
+      gre: 'el', ces: 'cs', cze: 'cs', ron: 'ro', rum: 'ro', hun: 'hu', tha: 'th',
+      vie: 'vi', ind: 'id', msa: 'ms', may: 'ms'
+    };
+
+    const normalizeSubtitleLanguage = (code) => {
+      const tag = String(code || '').trim().toLowerCase().replace(/_/g, '-');
+      if (!tag) return '';
+      const parts = tag.split('-');
+      parts[0] = subtitleLanguageAliases[parts[0]] || parts[0];
+      return parts.join('-');
+    };
+
+    const subtitleFileIdentity = (url) => {
+      const clean = String(url).split('#')[0].split('?')[0];
+      if (!isSubtitle(clean)) return null;
+      const withoutExt = clean.replace(/\.[^./]+$/, '');
+      const langMatch = /^(.*)\.([a-z]{2,3}(?:[-_][a-z0-9]{2,8})?)$/i.exec(withoutExt);
+      if (langMatch && /^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})?$/i.test(langMatch[2])) {
+        return { base: langMatch[1], lang: langMatch[2] };
+      }
+      return { base: withoutExt, lang: '' };
+    };
+
+    const preferredSubtitleLanguages = () => {
+      const codes = [];
+      const push = (code) => {
+        const normalized = normalizeSubtitleLanguage(code);
+        if (normalized && !codes.includes(normalized)) codes.push(normalized);
+      };
+      if (window.i18n && window.i18n.locale) push(window.i18n.locale);
+      const browserLanguages = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+      browserLanguages.forEach(push);
+      push('en');
+      return codes;
+    };
+
+    const subtitleLanguageScore = (fileLang, preferred) => {
+      if (!fileLang) return 0;
+      const file = normalizeSubtitleLanguage(fileLang);
+      const filePrimary = file.split('-')[0];
+      let best = 0;
+      preferred.forEach((lang, index) => {
+        const rank = file === lang ? 3 : (filePrimary === lang.split('-')[0] ? 2 : 0);
+        if (!rank) return;
+        const score = rank * 100 - index;
+        if (score > best) best = score;
+      });
+      return best;
+    };
+
     const getMatchingSubtitleUrl = (mediaUrl) => {
       if (!mediaUrl || !Array.isArray(app.links.files)) return null;
       if (isAudio(mediaUrl)) return null;
-      const mediaBase = stripUrlExtension(mediaUrl);
+      const mediaBase = stripUrlExtension(String(mediaUrl).split('#')[0].split('?')[0]);
       if (!mediaBase) return null;
 
-      const candidates = app.links.files.filter((file) => file && file.url && isSubtitle(file.url));
-      const matches = candidates.filter((file) => stripUrlExtension(file.url) === mediaBase);
-      if (!matches.length) return null;
-
-      const vtt = matches.find((file) => file.url && file.url.toLowerCase().endsWith('.vtt'));
-      return (vtt || matches[0]).url;
+      const preferred = preferredSubtitleLanguages();
+      const matches = [];
+      app.links.files.forEach((file) => {
+        if (!file || !file.url) return;
+        const identity = subtitleFileIdentity(file.url);
+        if (!identity || identity.base !== mediaBase) return;
+        const clean = String(file.url).split('#')[0].split('?')[0].toLowerCase();
+        matches.push({
+          url: file.url,
+          language: subtitleLanguageScore(identity.lang, preferred),
+          untagged: identity.lang ? 0 : 1,
+          vtt: clean.endsWith('.vtt') ? 1 : 0
+        });
+      });
+      matches.sort((a, b) => (b.language - a.language) || (b.untagged - a.untagged) || (b.vtt - a.vtt));
+      return matches.length ? matches[0].url : null;
     }
 
     const maybeAutoLoadSubtitles = () => {
@@ -4259,11 +4324,14 @@
       if (opts.updateHash) updateHash();
     }
 
-    const isSubtitle = (url) => url.toString().endsWith('.vtt') || url.toString().endsWith('.srt');
+    const isSubtitle = (url) => {
+      const clean = String(url || '').split('#')[0].split('?')[0].toLowerCase();
+      return clean.endsWith('.vtt') || clean.endsWith('.srt');
+    };
 
     const isSRT = (url) => {
       try {
-        return url.endsWith('.srt');
+        return String(url).split('#')[0].split('?')[0].toLowerCase().endsWith('.srt');
       } catch (e) {
         return false;
       }

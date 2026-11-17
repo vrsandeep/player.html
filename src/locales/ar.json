@@ -87,7 +87,7 @@
     "settings.transitions.label": "انتقالات الواجهة",
     "settings.transitions.desc": "تفعيل الانتقالات المتحركة في الواجهة أو تعطيلها",
     "settings.auto-subtitles.label": "تحميل الترجمة المطابقة تلقائيًا",
-    "settings.auto-subtitles.desc": "تحميل ملف ترجمة يحمل اسم ملف الفيديو نفسه تلقائيًا، مثل .vtt أو .srt.",
+    "settings.auto-subtitles.desc": "تحميل ملف ترجمة يحمل اسم ملف الفيديو نفسه تلقائيًا، بما في ذلك الأسماء ذات رمز اللغة مثل video.en.srt.",
     "settings.subtitle-font.label": "خط الترجمة",
     "settings.subtitle-font.desc": "تعيين عائلة خط الترجمة.",
     "settings.subtitle-size.label": "حجم الترجمة",

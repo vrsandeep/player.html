@@ -87,7 +87,7 @@
     "settings.transitions.label": "Transitions de l’interface",
     "settings.transitions.desc": "Activer ou désactiver les transitions animées de l’interface",
     "settings.auto-subtitles.label": "Charger les sous-titres correspondants",
-    "settings.auto-subtitles.desc": "Charger automatiquement un fichier de sous-titres portant le même nom que la vidéo, par exemple .vtt ou .srt.",
+    "settings.auto-subtitles.desc": "Charger automatiquement un fichier de sous-titres portant le même nom que la vidéo, y compris les noms avec un code de langue tels que video.en.srt.",
     "settings.subtitle-font.label": "Police des sous-titres",
     "settings.subtitle-font.desc": "Définir la police des sous-titres.",
     "settings.subtitle-size.label": "Taille des sous-titres",

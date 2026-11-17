@@ -96,7 +96,7 @@
     "settings.transitions.label": "इंटरफ़ेस ट्रांज़िशन",
     "settings.transitions.desc": "इंटरफ़ेस में ऐनिमेटेड ट्रांज़िशन चालू या बंद करें",
     "settings.auto-subtitles.label": "मेल खाते उपशीर्षक अपने-आप लोड करें",
-    "settings.auto-subtitles.desc": "वीडियो के समान नाम वाली .vtt या .srt जैसी उपशीर्षक फ़ाइल अपने-आप लोड करें।",
+    "settings.auto-subtitles.desc": "वीडियो के समान नाम वाली उपशीर्षक फ़ाइल अपने-आप लोड करें, video.en.srt जैसे भाषा-कोड वाले नामों सहित।",
     "settings.subtitle-font.label": "उपशीर्षक का फ़ॉन्ट",
     "settings.subtitle-font.desc": "उपशीर्षक का फ़ॉन्ट परिवार चुनें।",
     "settings.subtitle-size.label": "उपशीर्षक का आकार",

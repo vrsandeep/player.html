@@ -96,7 +96,7 @@
     "settings.transitions.label": "UI Transitions",
     "settings.transitions.desc": "Enable/disable animated transitions in the UI",
     "settings.auto-subtitles.label": "Auto-load matching subtitles",
-    "settings.auto-subtitles.desc": "Automatically load a subtitle file that shares the video filename (e.g. .vtt or .srt).",
+    "settings.auto-subtitles.desc": "Automatically load a subtitle file that shares the video filename, including language-coded names such as video.en.srt.",
     "settings.subtitle-font.label": "Subtitle font",
     "settings.subtitle-font.desc": "Set subtitle font family.",
     "settings.subtitle-size.label": "Subtitle size",

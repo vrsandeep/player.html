@@ -87,7 +87,7 @@
     "settings.transitions.label": "介面過場動畫",
     "settings.transitions.desc": "啟用或停用介面過場動畫",
     "settings.auto-subtitles.label": "自動載入相符的字幕",
-    "settings.auto-subtitles.desc": "自動載入與影片檔案同名的字幕檔案（例如 .vtt 或 .srt）。",
+    "settings.auto-subtitles.desc": "自動載入與影片同名的字幕檔案，包括 video.en.srt 這類帶語言代碼的檔名。",
     "settings.subtitle-font.label": "字幕字型",
     "settings.subtitle-font.desc": "設定字幕字型。",
     "settings.subtitle-size.label": "字幕大小",

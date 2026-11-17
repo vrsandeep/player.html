@@ -96,7 +96,7 @@
     "settings.transitions.label": "Oberflächenübergänge",
     "settings.transitions.desc": "Animierte Übergänge der Oberfläche aktivieren oder deaktivieren",
     "settings.auto-subtitles.label": "Passende Untertitel automatisch laden",
-    "settings.auto-subtitles.desc": "Automatisch eine Untertiteldatei mit demselben Namen wie das Video laden, etwa .vtt oder .srt.",
+    "settings.auto-subtitles.desc": "Automatisch eine Untertiteldatei mit demselben Namen wie das Video laden, auch mit Sprachcode wie video.en.srt.",
     "settings.subtitle-font.label": "Untertitelschrift",
     "settings.subtitle-font.desc": "Schriftfamilie für Untertitel festlegen.",
     "settings.subtitle-size.label": "Untertitelgröße",

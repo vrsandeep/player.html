@@ -96,7 +96,7 @@
     "settings.transitions.label": "گذارهای رابط",
     "settings.transitions.desc": "فعال یا غیرفعال کردن گذارهای متحرک رابط کاربری",
     "settings.auto-subtitles.label": "بارگیری خودکار زیرنویس هم‌نام",
-    "settings.auto-subtitles.desc": "بارگیری خودکار فایل زیرنویس هم‌نام با ویدیو، مانند .vtt یا .srt.",
+    "settings.auto-subtitles.desc": "بارگیری خودکار فایل زیرنویس هم‌نام با ویدیو، از جمله نام‌های دارای کد زبان مانند video.en.srt.",
     "settings.subtitle-font.label": "قلم زیرنویس",
     "settings.subtitle-font.desc": "تنظیم خانوادهٔ قلم زیرنویس.",
     "settings.subtitle-size.label": "اندازهٔ زیرنویس",

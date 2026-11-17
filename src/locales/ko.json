@@ -93,7 +93,7 @@
     "settings.transitions.label": "인터페이스 전환 효과",
     "settings.transitions.desc": "인터페이스 전환 애니메이션을 켜거나 끕니다",
     "settings.auto-subtitles.label": "일치하는 자막 자동 불러오기",
-    "settings.auto-subtitles.desc": "동영상과 이름이 같은 .vtt 또는 .srt 등의 자막 파일을 자동으로 불러옵니다.",
+    "settings.auto-subtitles.desc": "동영상과 이름이 같은 자막 파일을 자동으로 불러옵니다. video.en.srt처럼 언어 코드가 붙은 이름도 포함합니다.",
     "settings.subtitle-font.label": "자막 글꼴",
     "settings.subtitle-font.desc": "자막의 글꼴을 설정합니다.",
     "settings.subtitle-size.label": "자막 크기",
