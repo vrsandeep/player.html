@@ -3381,7 +3381,7 @@
 
       if (getMediaUrl()) writeWatchHistory('mediachange');
       resetPlayer();
-      resetAudioDiscovery();
+      audioSwitcher.reset();
 
       // Being playback if there is a URL
       if (!!url) {
@@ -3892,84 +3892,10 @@
       if (mediaUrl) autoSubtitlePlaybackStartedFor = mediaUrl;
     }
 
-    const subtitleLanguageAliases = {
-      eng: 'en', fre: 'fr', fra: 'fr', deu: 'de', ger: 'de', spa: 'es', por: 'pt',
-      jpn: 'ja', kor: 'ko', zho: 'zh', chi: 'zh', ara: 'ar', hin: 'hi', ita: 'it',
-      nld: 'nl', dut: 'nl', pol: 'pl', fas: 'fa', per: 'fa', heb: 'he', tur: 'tr',
-      rus: 'ru', ukr: 'uk', swe: 'sv', nor: 'no', dan: 'da', fin: 'fi', ell: 'el',
-      gre: 'el', ces: 'cs', cze: 'cs', ron: 'ro', rum: 'ro', hun: 'hu', tha: 'th',
-      vie: 'vi', ind: 'id', msa: 'ms', may: 'ms'
-    };
-
-    const normalizeSubtitleLanguage = (code) => {
-      const tag = String(code || '').trim().toLowerCase().replace(/_/g, '-');
-      if (!tag) return '';
-      const parts = tag.split('-');
-      parts[0] = subtitleLanguageAliases[parts[0]] || parts[0];
-      return parts.join('-');
-    };
-
-    const subtitleFileIdentity = (url) => {
-      const clean = String(url).split('#')[0].split('?')[0];
-      if (!isSubtitle(clean)) return null;
-      const withoutExt = clean.replace(/\.[^./]+$/, '');
-      const langMatch = /^(.*)\.([a-z]{2,3}(?:[-_][a-z0-9]{2,8})?)$/i.exec(withoutExt);
-      if (langMatch && /^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})?$/i.test(langMatch[2])) {
-        return { base: langMatch[1], lang: langMatch[2] };
-      }
-      return { base: withoutExt, lang: '' };
-    };
-
-    const preferredSubtitleLanguages = () => {
-      const codes = [];
-      const push = (code) => {
-        const normalized = normalizeSubtitleLanguage(code);
-        if (normalized && !codes.includes(normalized)) codes.push(normalized);
-      };
-      if (window.i18n && window.i18n.locale) push(window.i18n.locale);
-      const browserLanguages = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
-      browserLanguages.forEach(push);
-      push('en');
-      return codes;
-    };
-
-    const subtitleLanguageScore = (fileLang, preferred) => {
-      if (!fileLang) return 0;
-      const file = normalizeSubtitleLanguage(fileLang);
-      const filePrimary = file.split('-')[0];
-      let best = 0;
-      preferred.forEach((lang, index) => {
-        const rank = file === lang ? 3 : (filePrimary === lang.split('-')[0] ? 2 : 0);
-        if (!rank) return;
-        const score = rank * 100 - index;
-        if (score > best) best = score;
-      });
-      return best;
-    };
-
-    const getMatchingSubtitleUrl = (mediaUrl) => {
-      if (!mediaUrl || !Array.isArray(app.links.files)) return null;
-      if (isAudio(mediaUrl)) return null;
-      const mediaBase = stripUrlExtension(String(mediaUrl).split('#')[0].split('?')[0]);
-      if (!mediaBase) return null;
-
-      const preferred = preferredSubtitleLanguages();
-      const matches = [];
-      app.links.files.forEach((file) => {
-        if (!file || !file.url) return;
-        const identity = subtitleFileIdentity(file.url);
-        if (!identity || identity.base !== mediaBase) return;
-        const clean = String(file.url).split('#')[0].split('?')[0].toLowerCase();
-        matches.push({
-          url: file.url,
-          language: subtitleLanguageScore(identity.lang, preferred),
-          untagged: identity.lang ? 0 : 1,
-          vtt: clean.endsWith('.vtt') ? 1 : 0
-        });
-      });
-      matches.sort((a, b) => (b.language - a.language) || (b.untagged - a.untagged) || (b.vtt - a.vtt));
-      return matches.length ? matches[0].url : null;
-    }
+    const getMatchingSubtitleUrl = (mediaUrl) => mediaLanguage.matchSubtitle(mediaUrl, app.links && app.links.files, {
+      isSubtitle,
+      isAudio
+    });
 
     const maybeAutoLoadSubtitles = () => {
       if (!shouldAutoLoadMatchingSubtitles()) return;
@@ -5101,7 +5027,7 @@
     const setupPrimaryControls = () => {
       $('.btn-subtitles').on('click', () => toggleModal($subtitles));
       $('.btn-audio').on('click', () => {
-        renderAudioPicker();
+        audioSwitcher.render();
         toggleModal($audio);
       });
       $('.btn-fileinfo').on('click', () => toggleModal($fileinfo));
@@ -5169,423 +5095,28 @@
       $('.modal-background-overlay').on('click', () => hideModals());
     }
 
-    const audioPreferenceByFolder = new Map();
-    const boundAudioTrackLists = new WeakSet();
-    let applyingAudioTrack = false;
-    let audioPreferenceAppliedFor = '';
-    let audioDiscoverToken = 0;
-    let audioRewriteGeneration = 0;
-    let discoveredAudioUrl = '';
-    let discoveredAudioTracks = [];
-    let activeAudioBlobUrl = '';
-
-    const nativeAudioTracks = () => {
-      const list = $player && $player.audioTracks;
-      if (!list || !list.length) return [];
-      const tracks = [];
-      for (let i = 0; i < list.length; i++) {
-        if (list[i]) tracks.push(list[i]);
-      }
-      return tracks;
-    };
-
-    const audioMediaUrl = () => {
-      const url = getMediaUrl();
-      if (discoveredAudioUrl && activeAudioBlobUrl && url === activeAudioBlobUrl) return discoveredAudioUrl;
-      return url;
-    };
-
-    const getAudioTracks = () => {
-      const native = nativeAudioTracks();
-      const discovered = discoveredAudioUrl && discoveredAudioUrl === audioMediaUrl() ? discoveredAudioTracks : [];
-      return discovered.length > native.length ? discovered : native;
-    };
-
-    const resetAudioDiscovery = () => {
-      audioDiscoverToken += 1;
-      audioRewriteGeneration += 1;
-      discoveredAudioTracks = [];
-      discoveredAudioUrl = '';
-      audioPreferenceAppliedFor = '';
-      if (activeAudioBlobUrl) {
-        URL.revokeObjectURL(activeAudioBlobUrl);
-        activeAudioBlobUrl = '';
-      }
-      if ($body) $body.addClass('no-audio-tracks');
-    };
-
-    const mp4Fourcc = (view, offset) => String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
-
-    const readMp4Boxes = (view, start, end) => {
-      const boxes = [];
-      let offset = start;
-      while (offset + 8 <= end) {
-        let size = view.getUint32(offset);
-        const type = mp4Fourcc(view, offset + 4);
-        let header = 8;
-        if (size === 1) {
-          if (offset + 16 > end) return { boxes, partial: { start: offset } };
-          size = Number(view.getBigUint64(offset + 8));
-          header = 16;
-        } else if (size === 0) {
-          size = end - offset;
-        }
-        if (!Number.isFinite(size) || size < header) break;
-        if (offset + size > end) return { boxes, partial: { type, start: offset, size, header } };
-        boxes.push({ type, start: offset, size, header, end: offset + size });
-        offset += size;
-      }
-      return { boxes, partial: null };
-    };
-
-    const findMp4Box = (view, box, type) => {
-      for (const child of readMp4Boxes(view, box.start + box.header, box.end).boxes) {
-        if (child.type === type) return child;
-        const nested = findMp4Box(view, child, type);
-        if (nested) return nested;
-      }
-      return null;
-    };
-
-    const mp4CString = (bytes, start, end) => {
-      let text = '';
-      for (let i = start; i < end && bytes[i] !== 0; i++) text += String.fromCharCode(bytes[i]);
-      try { return decodeURIComponent(escape(text)); } catch (e) { return text; }
-    };
-
-    const audioTracksInMp4 = (bytes) => {
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const top = readMp4Boxes(view, 0, bytes.length).boxes;
-      const moov = top.find((box) => box.type === 'moov');
-      if (!moov) return [];
-      const tracks = [];
-      readMp4Boxes(view, moov.start + moov.header, moov.end).boxes.forEach((box) => {
-        if (box.type !== 'trak') return;
-        const hdlr = findMp4Box(view, box, 'hdlr');
-        if (!hdlr || mp4Fourcc(view, hdlr.start + hdlr.header + 8) !== 'soun') return;
-        const mdhd = findMp4Box(view, box, 'mdhd');
-        let language = '';
-        if (mdhd) {
-          const version = view.getUint8(mdhd.start + mdhd.header);
-          const packed = view.getUint16(mdhd.start + mdhd.header + (version === 1 ? 32 : 20));
-          language = String.fromCharCode(0x60 + ((packed >> 10) & 31), 0x60 + ((packed >> 5) & 31), 0x60 + (packed & 31));
-          if (language === 'und') language = '';
-        }
-        const rawName = mp4CString(bytes, hdlr.start + hdlr.header + 24, hdlr.end).trim();
-        const label = rawName && rawName !== 'SoundHandler' ? rawName : '';
-        tracks.push({ label, language: language ? normalizeSubtitleLanguage(language) : '', enabled: tracks.length === 0 });
-      });
-      return tracks;
-    };
-
-    const contentRangeTotal = (response) => {
-      const match = /\/(\d+)\s*$/.exec(response.headers.get('content-range') || '');
-      return match ? Number(match[1]) : 0;
-    };
-
-    const fetchByteRange = async (url, start, end) => {
-      const response = await fetch(url, { headers: { Range: `bytes=${start}-${end}` } });
-      if (!response.ok) throw new Error(`Unable to read media (${response.status})`);
-      const bytes = new Uint8Array(await response.arrayBuffer());
-      const total = response.status === 200 ? bytes.length : (contentRangeTotal(response) || bytes.length);
-      return { bytes, total, whole: response.status === 200 || start === 0 && bytes.length >= total };
-    };
-
-    const readMp4AudioTracks = async (url) => {
-      const first = await fetchByteRange(url, 0, 1048575);
-      if (first.whole) return audioTracksInMp4(first.bytes);
-      const view = new DataView(first.bytes.buffer, first.bytes.byteOffset, first.bytes.byteLength);
-      const scanned = readMp4Boxes(view, 0, first.bytes.length);
-      const moov = scanned.boxes.find((box) => box.type === 'moov');
-      if (moov) return audioTracksInMp4(first.bytes);
-      const partial = scanned.partial;
-      if (partial && partial.type === 'moov' && partial.size) {
-        const exact = await fetchByteRange(url, partial.start, partial.start + partial.size - 1);
-        return audioTracksInMp4(exact.bytes);
-      }
-      const moovStart = partial && partial.size ? partial.start + partial.size : Math.max(0, first.total - 1048576);
-      if (moovStart >= first.total) return [];
-      const rest = await fetchByteRange(url, moovStart, first.total - 1);
-      return audioTracksInMp4(rest.bytes);
-    };
-
-    const isolateMp4AudioTrack = (bytes, index) => {
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      const top = readMp4Boxes(view, 0, bytes.length).boxes;
-      const moov = top.find((box) => box.type === 'moov');
-      const mdat = top.find((box) => box.type === 'mdat');
-      if (!moov || !mdat) return null;
-      const children = readMp4Boxes(view, moov.start + moov.header, moov.end).boxes;
-      const audio = children.filter((box) => {
-        if (box.type !== 'trak') return false;
-        const hdlr = findMp4Box(view, box, 'hdlr');
-        return hdlr && mp4Fourcc(view, hdlr.start + hdlr.header + 8) === 'soun';
-      });
-      const keep = audio[index];
-      if (!keep || audio.length < 2) return null;
-      const kept = [];
-      let removed = 0;
-      children.forEach((box) => {
-        if (audio.includes(box) && box !== keep) removed += box.size;
-        else kept.push(bytes.subarray(box.start, box.end));
-      });
-      const header = bytes.slice(moov.start, moov.start + moov.header);
-      const headerView = new DataView(header.buffer, header.byteOffset, header.byteLength);
-      if (moov.header === 16) headerView.setBigUint64(8, BigInt(moov.size - removed));
-      else headerView.setUint32(0, moov.size - removed);
-      const parts = [];
-      top.forEach((box) => {
-        if (box === moov) parts.push(header, ...kept);
-        else parts.push(bytes.subarray(box.start, box.end));
-      });
-      const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
-      let cursor = 0;
-      parts.forEach((part) => {
-        out.set(part, cursor);
-        cursor += part.length;
-      });
-      const outView = new DataView(out.buffer);
-      const newMdat = readMp4Boxes(outView, 0, out.length).boxes.find((box) => box.type === 'mdat');
-      const delta = newMdat ? newMdat.start - mdat.start : 0;
-      if (delta) {
-        const walk = (start, end) => {
-          readMp4Boxes(outView, start, end).boxes.forEach((box) => {
-            if (box.type === 'stco' || box.type === 'co64') {
-              const count = outView.getUint32(box.start + box.header + 4);
-              const wide = box.type === 'co64';
-              for (let i = 0; i < count; i++) {
-                const pos = box.start + box.header + 8 + i * (wide ? 8 : 4);
-                if (wide) outView.setBigUint64(pos, outView.getBigUint64(pos) + BigInt(delta));
-                else outView.setUint32(pos, (outView.getUint32(pos) + delta) >>> 0);
-              }
-            } else {
-              walk(box.start + box.header, box.end);
-            }
-          });
-        };
-        walk(0, out.length);
-      }
-      return out;
-    };
-
-    const restorePlaybackPosition = (time, paused, rate) => {
-      const apply = () => {
-        if (Number.isFinite(time) && time > 0) {
-          try { $player.currentTime = time; } catch (e) {}
-        }
-        if (Number.isFinite(rate) && rate > 0) $player.playbackRate = rate;
-        if (!paused) $player.play().catch(() => {});
-      };
-      if ($player.readyState >= 1) apply();
-      else $player.addEventListener('loadedmetadata', apply, { once: true });
-    };
-
-    const useContainerAudioTrack = async (index) => {
-      const url = audioMediaUrl();
-      const generation = ++audioRewriteGeneration;
-      const playable = await getPlayableUrlForMedia(url);
-      if (generation !== audioRewriteGeneration || audioMediaUrl() !== url) return;
-      const time = $player.currentTime || 0;
-      const paused = $player.paused;
-      const rate = $player.playbackRate;
-      if (index === 0) {
-        if (activeAudioBlobUrl && $player.src === activeAudioBlobUrl) {
-          URL.revokeObjectURL(activeAudioBlobUrl);
-          activeAudioBlobUrl = '';
-          $player.src = playable;
-          restorePlaybackPosition(time, paused, rate);
-        }
-        return;
-      }
-      const response = await fetch(playable);
-      if (!response.ok) throw new Error(`Unable to read media (${response.status})`);
-      const isolated = isolateMp4AudioTrack(new Uint8Array(await response.arrayBuffer()), index);
-      if (!isolated || generation !== audioRewriteGeneration || audioMediaUrl() !== url) return;
-      if (activeAudioBlobUrl) URL.revokeObjectURL(activeAudioBlobUrl);
-      activeAudioBlobUrl = URL.createObjectURL(new Blob([isolated], { type: 'video/mp4' }));
-      $player.src = activeAudioBlobUrl;
-      restorePlaybackPosition(time, paused, rate);
-    };
-
-    const audioFolderKey = (url = getMediaUrl()) => {
-      const clean = String(url || '').split('#')[0].split('?')[0];
-      const slash = clean.lastIndexOf('/');
-      return slash >= 0 ? clean.slice(0, slash + 1) : '';
-    };
-
-    const audioTrackLabel = (track, index) => {
-      const label = String(track.label || '').trim();
-      const language = String(track.language || '').trim();
-      if (label && language && label.toLowerCase() !== language.toLowerCase()) return `${label} (${language})`;
-      if (label) return label;
-      if (language) return language;
-      return t('ui.audio-track', { n: index + 1 });
-    };
-
-    const rememberAudioPreference = (track, index) => {
-      const folder = audioFolderKey();
-      if (!folder) return;
-      audioPreferenceByFolder.set(folder, {
-        language: normalizeSubtitleLanguage(track.language || ''),
-        label: String(track.label || '').trim(),
-        index
-      });
-    };
-
-    const setEnabledAudioTrack = (tracks, index) => {
-      const chosen = tracks[index];
-      if (!chosen) return;
-      applyingAudioTrack = true;
-      try {
-        chosen.enabled = true;
-        tracks.forEach((track, i) => {
-          if (i !== index) track.enabled = false;
-        });
-      } catch (e) {}
-      applyingAudioTrack = false;
-    };
-
-    const matchingAudioTrackIndex = (tracks, preference) => {
-      let bestIndex = -1;
-      let bestScore = 0;
-      tracks.forEach((track, index) => {
-        const language = normalizeSubtitleLanguage(track.language || '');
-        const preferred = preference.language || '';
-        let score = 0;
-        if (preferred && language) {
-          if (language === preferred) score = 3;
-          else if (language.split('-')[0] === preferred.split('-')[0]) score = 2;
-        }
+    const audioSwitcher = createAudioTrackSwitcher({
+      player: $player,
+      modal: $audio,
+      body: $body,
+      getMediaUrl,
+      getPlayableUrl: getPlayableUrlForMedia,
+      isAudio,
+      isAudioMode: () => $body.hasClass('is-audio'),
+      trackLabel: (track, index) => {
         const label = String(track.label || '').trim();
-        if (!score && preference.label && label === preference.label) score = 1;
-        if (score > bestScore) {
-          bestScore = score;
-          bestIndex = index;
-        }
-      });
-      if (bestIndex >= 0) return bestIndex;
-      if (!preference.language && !preference.label && Number.isInteger(preference.index) && tracks[preference.index]) return preference.index;
-      return -1;
-    };
+        const language = String(track.language || '').trim();
+        if (label && language && label.toLowerCase() !== language.toLowerCase()) return `${label} (${language})`;
+        if (label) return label;
+        if (language) return language;
+        return t('ui.audio-track', { n: index + 1 });
+      },
+      escapeHtml,
+      closeButtonHtml: getModalCloseButtonHtml,
+      closeModal: () => hideModals(),
+      setPressed: () => setAriaPressed('.btn-audio', true)
+    });
 
-    const applySavedAudioTrack = () => {
-      const folder = audioFolderKey();
-      const preference = folder && audioPreferenceByFolder.get(folder);
-      const tracks = getAudioTracks();
-      if (!preference || tracks.length < 2) return false;
-      const index = matchingAudioTrackIndex(tracks, preference);
-      if (index < 0) return false;
-      const already = tracks[index].enabled && tracks.every((track, i) => track.enabled === (i === index));
-      if (!already) setEnabledAudioTrack(tracks, index);
-      return true;
-    };
-
-    const updateAudioPickerVisibility = () => {
-      const multiple = !$body.hasClass('is-audio') && getAudioTracks().length > 1;
-      if (multiple) $body.removeClass('no-audio-tracks');
-      else $body.addClass('no-audio-tracks');
-      if (!multiple && $audio && $audio.hasClass('show')) hideModals();
-    };
-
-    const renderAudioPicker = () => {
-      if (!$audio) return;
-      const tracks = getAudioTracks();
-      const items = tracks.map((track, index) => {
-        const selected = track.enabled ? ' is-selected' : '';
-        const current = track.enabled ? " aria-current='true'" : '';
-        return `<li class='audio-choice modal-item${selected}' tabindex='0' data-audio-index='${index}'${current}>${escapeHtml(audioTrackLabel(track, index))}</li>`;
-      }).join('');
-      $audio.html(`${getModalCloseButtonHtml()}${items}`);
-      [...$audio.querySelectorAll('.audio-choice')].forEach((choice) => {
-        const activate = (e) => {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          selectAudioTrack(Number(choice.dataset.audioIndex));
-          hideModals();
-        };
-        $(choice).on('click', activate);
-        $(choice).on('keydown', (e) => {
-          if (e.key !== 'Enter' && e.key !== ' ') return;
-          activate(e);
-        });
-      });
-    };
-
-    const selectAudioTrack = (index) => {
-      const tracks = getAudioTracks();
-      const track = tracks[index];
-      if (!track) return;
-      rememberAudioPreference(track, index);
-      if (nativeAudioTracks().length > 1) setEnabledAudioTrack(nativeAudioTracks(), index);
-      else {
-        setEnabledAudioTrack(tracks, index);
-        useContainerAudioTrack(index).catch((error) => console.warn('Unable to select audio track', error));
-      }
-      audioPreferenceAppliedFor = getMediaUrl();
-      setAriaPressed('.btn-audio', true);
-    };
-
-    const discoverContainerAudioTracks = async (url) => {
-      if (activeAudioBlobUrl && discoveredAudioTracks.length > 1 && ($player.src === activeAudioBlobUrl || $player.currentSrc === activeAudioBlobUrl)) {
-        updateAudioPickerVisibility();
-        if ($audio && $audio.hasClass('show')) renderAudioPicker();
-        return;
-      }
-      if (!url || url.startsWith('blob:') || isAudio(url) || nativeAudioTracks().length > 1) return;
-      if (activeAudioBlobUrl && $player.currentSrc === activeAudioBlobUrl && discoveredAudioUrl === url) {
-        updateAudioPickerVisibility();
-        if ($audio && $audio.hasClass('show')) renderAudioPicker();
-        return;
-      }
-      const token = ++audioDiscoverToken;
-      try {
-        const playable = await getPlayableUrlForMedia(url);
-        if (token !== audioDiscoverToken || audioMediaUrl() !== url) return;
-        const tracks = await readMp4AudioTracks(playable);
-        if (token !== audioDiscoverToken || audioMediaUrl() !== url || nativeAudioTracks().length > 1) return;
-        const preference = audioPreferenceByFolder.get(audioFolderKey(url));
-        const match = preference && tracks.length > 1 ? matchingAudioTrackIndex(tracks, preference) : -1;
-        const selected = match >= 0 ? match : 0;
-        discoveredAudioUrl = url;
-        discoveredAudioTracks = tracks.map((track, index) => ({ ...track, enabled: index === selected }));
-        updateAudioPickerVisibility();
-        if ($audio && $audio.hasClass('show')) renderAudioPicker();
-        if (selected > 0) await useContainerAudioTrack(selected);
-      } catch (error) {
-        if (token !== audioDiscoverToken) return;
-        console.warn('Unable to read audio tracks', error);
-        discoveredAudioTracks = [];
-        discoveredAudioUrl = url;
-        updateAudioPickerVisibility();
-      }
-    };
-
-    const refreshAudioTracks = (opts = {}) => {
-      const list = $player && $player.audioTracks;
-      if (list && typeof list.addEventListener === 'function' && !boundAudioTrackLists.has(list)) {
-        boundAudioTrackLists.add(list);
-        list.addEventListener('addtrack', () => refreshAudioTracks({ applyPreference: true }));
-        list.addEventListener('removetrack', () => refreshAudioTracks());
-        list.addEventListener('change', () => {
-          if (!applyingAudioTrack && $audio && $audio.hasClass('show')) renderAudioPicker();
-        });
-      }
-      const url = audioMediaUrl();
-      if (nativeAudioTracks().length > 1) {
-        if (opts.applyPreference && url && audioPreferenceAppliedFor !== url) {
-          applySavedAudioTrack();
-          audioPreferenceAppliedFor = url;
-        }
-        updateAudioPickerVisibility();
-        if ($audio && $audio.hasClass('show')) renderAudioPicker();
-        return;
-      }
-      if (opts.applyPreference && url) discoverContainerAudioTracks(url);
-      else {
-        updateAudioPickerVisibility();
-        if ($audio && $audio.hasClass('show')) renderAudioPicker();
-      }
-    };
 
     const setupPlayerEvents = () => {
       $player.on('loadedmetadata', () => {
@@ -5595,7 +5126,7 @@
         setTimeout(applySubtitlePositionPreference, 0);
         updateMediaSessionMetadata();
         updateMediaSessionPositionState();
-        refreshAudioTracks({ applyPreference: true });
+        audioSwitcher.refresh({ applyPreference: true });
       });
       $player.on('loadeddata', syncTrickSrc);
       $player.on('timeupdate', throttle(() => {
@@ -5743,7 +5274,7 @@
           break;
         case 'a':
           if (!$body.hasClass('no-audio-tracks') && !$body.hasClass('is-audio')) {
-            renderAudioPicker();
+            audioSwitcher.render();
             toggleModal($audio);
           }
           break;
@@ -5859,7 +5390,7 @@
       setModalAccessibilityState($el, true);
       $el.addClass('show');
       if ($el === $subtitles) updateSubtitleDurations();
-      if ($el === $audio) renderAudioPicker();
+      if ($el === $audio) audioSwitcher.render();
       if ($el === $fileinfo) updateFileinfo({ diagnostics: true });
       $el.once('click', hideModals);
       const $focus = getModalFirstFocusable($el);
@@ -6918,7 +6449,7 @@
     const getBasicFileinfoMetadata = () => {
       const url = getMediaUrl();
       const subtitles =   ($player.textTracks  && $player.textTracks.length  ? $player.textTracks.length  : 0);
-      const listedAudioTracks = getAudioTracks().length;
+      const listedAudioTracks = audioSwitcher.tracks().length;
       const audioTracks = listedAudioTracks || ($player.audioTracks && $player.audioTracks.length) || 1;
 
       return {

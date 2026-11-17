@@ -3662,6 +3662,476 @@ export{
 folderApiRequest
 };
 </script><script type="module">
+const global=window;
+const languageAliases={
+eng:'en',fre:'fr',fra:'fr',deu:'de',ger:'de',spa:'es',por:'pt',
+jpn:'ja',kor:'ko',zho:'zh',chi:'zh',ara:'ar',hin:'hi',ita:'it',
+nld:'nl',dut:'nl',pol:'pl',fas:'fa',per:'fa',heb:'he',tur:'tr',
+rus:'ru',ukr:'uk',swe:'sv',nor:'no',dan:'da',fin:'fi',ell:'el',
+gre:'el',ces:'cs',cze:'cs',ron:'ro',rum:'ro',hun:'hu',tha:'th',
+vie:'vi',ind:'id',msa:'ms',may:'ms'
+};
+const stripQuery=(url)=>String(url||'').split('#')[0].split('?')[0];
+const stripExtension=(url)=>{
+const clean=stripQuery(url);
+const match=/^(.*)(?:\.[^./]+)$/.exec(clean);
+return match?match[1]:clean;
+};
+const normalize=(code)=>{
+const tag=String(code||'').trim().toLowerCase().replace(/_/g,'-');
+if(!tag)return'';
+const parts=tag.split('-');
+parts[0]=languageAliases[parts[0]]||parts[0];
+return parts.join('-');
+};
+const preferredLanguages=()=>{
+const codes=[];
+const push=(code)=>{
+const normalized=normalize(code);
+if(normalized&&!codes.includes(normalized))codes.push(normalized);
+};
+if(global.i18n&&global.i18n.locale)push(global.i18n.locale);
+const browserLanguages=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language];
+browserLanguages.forEach(push);
+push('en');
+return codes;
+};
+const languageScore=(fileLang,preferred)=>{
+if(!fileLang)return 0;
+const file=normalize(fileLang);
+const filePrimary=file.split('-')[0];
+let best=0;
+preferred.forEach((lang,index)=>{
+const rank=file===lang?3:(filePrimary===lang.split('-')[0]?2:0);
+if(!rank)return;
+const score=rank*100-index;
+if(score>best)best=score;
+});
+return best;
+};
+const fileIdentity=(url,isSubtitle)=>{
+const clean=stripQuery(url);
+if(isSubtitle&&!isSubtitle(clean))return null;
+const withoutExt=clean.replace(/\.[^./]+$/,'');
+const langMatch=/^(.*)\.([a-z]{2,3}(?:[-_][a-z0-9]{2,8})?)$/i.exec(withoutExt);
+if(langMatch&&/^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})?$/i.test(langMatch[2])){
+return{base:langMatch[1],lang:langMatch[2]};
+}
+return{base:withoutExt,lang:''};
+};
+const matchSubtitle=(mediaUrl,files,options={})=>{
+if(!mediaUrl||!Array.isArray(files))return null;
+if(options.isAudio&&options.isAudio(mediaUrl))return null;
+const mediaBase=stripExtension(mediaUrl);
+if(!mediaBase)return null;
+const preferred=options.preferred||preferredLanguages();
+const matches=[];
+files.forEach((file)=>{
+if(!file||!file.url)return;
+const identity=fileIdentity(file.url,options.isSubtitle);
+if(!identity||identity.base!==mediaBase)return;
+const clean=stripQuery(file.url).toLowerCase();
+matches.push({
+url:file.url,
+language:languageScore(identity.lang,preferred),
+untagged:identity.lang?0:1,
+vtt:clean.endsWith('.vtt')?1:0
+});
+});
+matches.sort((a,b)=>(b.language-a.language)||(b.untagged-a.untagged)||(b.vtt-a.vtt));
+return matches.length?matches[0].url:null;
+};
+const matchTrack=(tracks,preference)=>{
+if(!preference||!Array.isArray(tracks))return-1;
+let bestIndex=-1;
+let bestScore=0;
+tracks.forEach((track,index)=>{
+const language=normalize(track.language||'');
+const preferred=preference.language||'';
+let score=0;
+if(preferred&&language){
+if(language===preferred)score=3;
+else if(language.split('-')[0]===preferred.split('-')[0])score=2;
+}
+const label=String(track.label||'').trim();
+if(!score&&preference.label&&label===preference.label)score=1;
+if(score>bestScore){
+bestScore=score;
+bestIndex=index;
+}
+});
+if(bestIndex>=0)return bestIndex;
+if(!preference.language&&!preference.label&&Number.isInteger(preference.index)&&tracks[preference.index])return preference.index;
+return-1;
+};
+global.mediaLanguage={normalize,preferredLanguages,matchSubtitle,matchTrack};
+</script><script type="module">
+const global=window;
+const fourcc=(view,offset)=>String.fromCharCode(view.getUint8(offset),view.getUint8(offset+1),view.getUint8(offset+2),view.getUint8(offset+3));
+const readBoxes=(view,start,end)=>{
+const boxes=[];
+let offset=start;
+while(offset+8<=end){
+let size=view.getUint32(offset);
+const type=fourcc(view,offset+4);
+let header=8;
+if(size===1){
+if(offset+16>end)return{boxes,partial:{start:offset}};
+size=Number(view.getBigUint64(offset+8));
+header=16;
+}else if(size===0){
+size=end-offset;
+}
+if(!Number.isFinite(size)||size<header)break;
+if(offset+size>end)return{boxes,partial:{type,start:offset,size,header}};
+boxes.push({type,start:offset,size,header,end:offset+size});
+offset+=size;
+}
+return{boxes,partial:null};
+};
+const findBox=(view,box,type)=>{
+for(const child of readBoxes(view,box.start+box.header,box.end).boxes){
+if(child.type===type)return child;
+const nested=findBox(view,child,type);
+if(nested)return nested;
+}
+return null;
+};
+const cstring=(view,start,end)=>{
+let text='';
+for(let i=start;i<end;i++){
+const code=view.getUint8(i);
+if(code===0)break;
+text+=String.fromCharCode(code);
+}
+try{return decodeURIComponent(escape(text));}catch(e){return text;}
+};
+const audioTracks=(view,moov)=>{
+const tracks=[];
+readBoxes(view,moov.start+moov.header,moov.end).boxes.forEach((box)=>{
+if(box.type!=='trak')return;
+const hdlr=findBox(view,box,'hdlr');
+if(!hdlr||fourcc(view,hdlr.start+hdlr.header+8)!=='soun')return;
+const mdhd=findBox(view,box,'mdhd');
+let language='';
+if(mdhd){
+const version=view.getUint8(mdhd.start+mdhd.header);
+const packed=view.getUint16(mdhd.start+mdhd.header+(version===1?32:20));
+language=String.fromCharCode(0x60+((packed>>10)&31),0x60+((packed>>5)&31),0x60+(packed&31));
+if(language==='und')language='';
+}
+const rawName=cstring(view,hdlr.start+hdlr.header+24,hdlr.end).trim();
+tracks.push({label:rawName&&rawName!=='SoundHandler'?rawName:'',language,box});
+});
+return tracks;
+};
+const listTracks=(bytes)=>{
+if(!bytes||!bytes.length)return[];
+const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+const moov=readBoxes(view,0,bytes.length).boxes.find((box)=>box.type==='moov');
+if(!moov)return[];
+return audioTracks(view,moov).map(({label,language})=>({label,language}));
+};
+const contentRangeTotal=(response)=>{
+const match=/\/(\d+)\s*$/.exec(response.headers.get('content-range')||'');
+return match?Number(match[1]):0;
+};
+const fetchRange=async(url,start,end)=>{
+const response=await fetch(url,{headers:{Range:`bytes=${start}-${end}`}});
+if(!response.ok)throw new Error(`Unable to read media (${response.status})`);
+const bytes=new Uint8Array(await response.arrayBuffer());
+const total=response.status===200?bytes.length:(contentRangeTotal(response)||bytes.length);
+return{bytes,total,whole:response.status===200||(start===0&&bytes.length>=total)};
+};
+const readTracks=async(url)=>{
+const first=await fetchRange(url,0,1048575);
+if(first.whole)return listTracks(first.bytes);
+const view=new DataView(first.bytes.buffer,first.bytes.byteOffset,first.bytes.byteLength);
+const scanned=readBoxes(view,0,first.bytes.length);
+if(scanned.boxes.some((box)=>box.type==='moov'))return listTracks(first.bytes);
+const partial=scanned.partial;
+if(partial&&partial.type==='moov'&&partial.size){
+const exact=await fetchRange(url,partial.start,partial.start+partial.size-1);
+return listTracks(exact.bytes);
+}
+const moovStart=partial&&partial.size?partial.start+partial.size:Math.max(0,first.total-1048576);
+if(moovStart>=first.total)return[];
+const rest=await fetchRange(url,moovStart,first.total-1);
+return listTracks(rest.bytes);
+};
+const isolateTrack=(bytes,index)=>{
+const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+const top=readBoxes(view,0,bytes.length).boxes;
+const moov=top.find((box)=>box.type==='moov');
+const mdat=top.find((box)=>box.type==='mdat');
+if(!moov||!mdat)return null;
+const children=readBoxes(view,moov.start+moov.header,moov.end).boxes;
+const tracks=audioTracks(view,moov);
+const keep=tracks[index]&&tracks[index].box;
+if(!keep||tracks.length<2)return null;
+const audioBoxes=new Set(tracks.map((track)=>track.box));
+const kept=[];
+let removed=0;
+children.forEach((box)=>{
+if(audioBoxes.has(box)&&box!==keep)removed+=box.size;
+else kept.push(bytes.subarray(box.start,box.end));
+});
+const header=bytes.slice(moov.start,moov.start+moov.header);
+const headerView=new DataView(header.buffer,header.byteOffset,header.byteLength);
+if(moov.header===16)headerView.setBigUint64(8,BigInt(moov.size-removed));
+else headerView.setUint32(0,moov.size-removed);
+const parts=[];
+top.forEach((box)=>{
+if(box===moov)parts.push(header,...kept);
+else parts.push(bytes.subarray(box.start,box.end));
+});
+const out=new Uint8Array(parts.reduce((sum,part)=>sum+part.length,0));
+let cursor=0;
+parts.forEach((part)=>{
+out.set(part,cursor);
+cursor+=part.length;
+});
+const outView=new DataView(out.buffer);
+const newMdat=readBoxes(outView,0,out.length).boxes.find((box)=>box.type==='mdat');
+const delta=newMdat?newMdat.start-mdat.start:0;
+if(!delta)return out;
+const walk=(start,end)=>{
+readBoxes(outView,start,end).boxes.forEach((box)=>{
+if(box.type==='stco'||box.type==='co64'){
+const count=outView.getUint32(box.start+box.header+4);
+const wide=box.type==='co64';
+for(let i=0;i<count;i++){
+const pos=box.start+box.header+8+i*(wide?8:4);
+if(wide)outView.setBigUint64(pos,outView.getBigUint64(pos)+BigInt(delta));
+else outView.setUint32(pos,(outView.getUint32(pos)+delta)>>>0);
+}
+}else{
+walk(box.start+box.header,box.end);
+}
+});
+};
+walk(0,out.length);
+return out;
+};
+global.mp4Audio={listTracks,readTracks,isolateTrack};
+</script><script type="module">
+const global=window;
+const folderKey=(url)=>{
+const clean=String(url||'').split('#')[0].split('?')[0];
+const slash=clean.lastIndexOf('/');
+return slash>=0?clean.slice(0,slash+1):'';
+};
+const nativeTracks=(player)=>{
+const list=player&&player.audioTracks;
+if(!list||!list.length)return[];
+const tracks=[];
+for(let i=0;i<list.length;i++){
+if(list[i])tracks.push(list[i]);
+}
+return tracks;
+};
+const setEnabled=(tracks,index)=>{
+const chosen=tracks[index];
+if(!chosen)return;
+try{
+chosen.enabled=true;
+tracks.forEach((track,i)=>{
+if(i!==index)track.enabled=false;
+});
+}catch(e){}
+};
+const createAudioTrackSwitcher=(host)=>{
+const preferenceByFolder=new Map();
+const boundLists=new WeakSet();
+let discoverToken=0;
+let rewriteGeneration=0;
+let discoveredUrl='';
+let discoveredTracks=[];
+let blobUrl='';
+let appliedFor='';
+let applying=false;
+const mediaUrl=()=>{
+const url=host.getMediaUrl();
+if(discoveredUrl&&blobUrl&&url===blobUrl)return discoveredUrl;
+return url;
+};
+const tracks=()=>{
+const native=nativeTracks(host.player);
+const discovered=discoveredUrl&&discoveredUrl===mediaUrl()?discoveredTracks:[];
+return discovered.length>native.length?discovered:native;
+};
+const remember=(track,index)=>{
+const folder=folderKey(mediaUrl());
+if(!folder)return;
+preferenceByFolder.set(folder,{
+language:global.mediaLanguage.normalize(track.language||''),
+label:String(track.label||'').trim(),
+index
+});
+};
+const updateVisibility=()=>{
+const multiple=!host.isAudioMode()&&tracks().length>1;
+host.body.classList.toggle('no-audio-tracks',!multiple);
+if(!multiple&&host.modal&&host.modal.classList.contains('show'))host.closeModal();
+};
+const render=()=>{
+if(!host.modal)return;
+const items=tracks().map((track,index)=>{
+const selected=track.enabled?' is-selected':'';
+const current=track.enabled?" aria-current='true'":'';
+return`<li class='audio-choice modal-item${selected}' tabindex='0' data-audio-index='${index}'${current}>${host.escapeHtml(host.trackLabel(track,index))}</li>`;
+}).join('');
+host.modal.innerHTML=`${host.closeButtonHtml()}${items}`;
+host.modal.querySelectorAll('.audio-choice').forEach((choice)=>{
+const activate=(event)=>{
+event.preventDefault();
+event.stopImmediatePropagation();
+select(Number(choice.dataset.audioIndex));
+host.closeModal();
+};
+choice.addEventListener('click',activate);
+choice.addEventListener('keydown',(event)=>{
+if(event.key!=='Enter'&&event.key!==' ')return;
+activate(event);
+});
+});
+};
+const restorePosition=(time,paused,rate)=>{
+const apply=()=>{
+if(Number.isFinite(time)&&time>0){
+try{host.player.currentTime=time;}catch(e){}
+}
+if(Number.isFinite(rate)&&rate>0)host.player.playbackRate=rate;
+if(!paused)host.player.play().catch(()=>{});
+};
+if(host.player.readyState>=1)apply();
+else host.player.addEventListener('loadedmetadata',apply,{once:true});
+};
+const useContainerTrack=async(index)=>{
+const url=mediaUrl();
+const generation=++rewriteGeneration;
+const playable=await host.getPlayableUrl(url);
+if(generation!==rewriteGeneration||mediaUrl()!==url)return;
+const time=host.player.currentTime||0;
+const paused=host.player.paused;
+const rate=host.player.playbackRate;
+if(index===0){
+if(blobUrl&&host.player.src===blobUrl){
+URL.revokeObjectURL(blobUrl);
+blobUrl='';
+host.player.src=playable;
+restorePosition(time,paused,rate);
+}
+return;
+}
+const response=await fetch(playable);
+if(!response.ok)throw new Error(`Unable to read media (${response.status})`);
+const isolated=global.mp4Audio.isolateTrack(new Uint8Array(await response.arrayBuffer()),index);
+if(!isolated||generation!==rewriteGeneration||mediaUrl()!==url)return;
+if(blobUrl)URL.revokeObjectURL(blobUrl);
+blobUrl=URL.createObjectURL(new Blob([isolated],{type:'video/mp4'}));
+host.player.src=blobUrl;
+restorePosition(time,paused,rate);
+};
+const select=(index)=>{
+const available=tracks();
+const track=available[index];
+if(!track)return;
+remember(track,index);
+const native=nativeTracks(host.player);
+if(native.length>1)setEnabled(native,index);
+else{
+setEnabled(available,index);
+useContainerTrack(index).catch((error)=>console.warn('Unable to select audio track',error));
+}
+host.setPressed(true);
+};
+const discover=async(url)=>{
+const player=host.player;
+if(blobUrl&&discoveredTracks.length>1&&(player.src===blobUrl||player.currentSrc===blobUrl)){
+updateVisibility();
+if(host.modal&&host.modal.classList.contains('show'))render();
+return;
+}
+if(!url||url.startsWith('blob:')||host.isAudio(url)||nativeTracks(player).length>1)return;
+const token=++discoverToken;
+try{
+const playable=await host.getPlayableUrl(url);
+if(token!==discoverToken||mediaUrl()!==url)return;
+const found=await global.mp4Audio.readTracks(playable);
+if(token!==discoverToken||mediaUrl()!==url||nativeTracks(player).length>1)return;
+const normalized=found.map((track)=>({
+label:track.label,
+language:global.mediaLanguage.normalize(track.language),
+enabled:false
+}));
+const preference=preferenceByFolder.get(folderKey(url));
+const match=normalized.length>1?global.mediaLanguage.matchTrack(normalized,preference):-1;
+const selected=match>=0?match:0;
+normalized.forEach((track,index)=>{track.enabled=index===selected;});
+discoveredUrl=url;
+discoveredTracks=normalized;
+updateVisibility();
+if(host.modal&&host.modal.classList.contains('show'))render();
+if(selected>0)await useContainerTrack(selected);
+}catch(error){
+if(token!==discoverToken)return;
+console.warn('Unable to read audio tracks',error);
+discoveredTracks=[];
+discoveredUrl=url;
+updateVisibility();
+}
+};
+const refresh=(opts={})=>{
+const list=host.player&&host.player.audioTracks;
+if(list&&typeof list.addEventListener==='function'&&!boundLists.has(list)){
+boundLists.add(list);
+list.addEventListener('addtrack',()=>refresh({applyPreference:true}));
+list.addEventListener('removetrack',()=>refresh());
+list.addEventListener('change',()=>{
+if(!applying&&host.modal&&host.modal.classList.contains('show'))render();
+});
+}
+const url=mediaUrl();
+if(nativeTracks(host.player).length>1){
+if(opts.applyPreference&&url&&appliedFor!==url){
+const preference=preferenceByFolder.get(folderKey(url));
+const native=nativeTracks(host.player);
+const index=global.mediaLanguage.matchTrack(native,preference);
+if(index>=0){
+applying=true;
+const already=native[index].enabled&&native.every((track,i)=>track.enabled===(i===index));
+if(!already)setEnabled(native,index);
+applying=false;
+}
+appliedFor=url;
+}
+updateVisibility();
+if(host.modal&&host.modal.classList.contains('show'))render();
+return;
+}
+if(opts.applyPreference&&url)discover(url);
+else{
+updateVisibility();
+if(host.modal&&host.modal.classList.contains('show'))render();
+}
+};
+const reset=()=>{
+discoverToken+=1;
+rewriteGeneration+=1;
+discoveredTracks=[];
+discoveredUrl='';
+appliedFor='';
+if(blobUrl){
+URL.revokeObjectURL(blobUrl);
+blobUrl='';
+}
+host.body.classList.add('no-audio-tracks');
+};
+return{tracks,render,refresh,reset,select};
+};
+global.createAudioTrackSwitcher=createAudioTrackSwitcher;
+</script><script type="module">
 ﻿const $html=$('html');
 const{t}=window.i18n;
 const $body=$('body');
@@ -6644,7 +7114,7 @@ if(url&&!opts.automatic)failedPlaylistItems=new WeakSet();
 playlistProgressStart=null;
 if(getMediaUrl())writeWatchHistory('mediachange');
 resetPlayer();
-resetAudioDiscovery();
+audioSwitcher.reset();
 if(!!url){
 currentMediaUrl=hashState.media=url;
 logInfo(`Loading media: ${url}`);
@@ -7094,78 +7564,10 @@ const markAutoSubtitlePlaybackStarted=()=>{
 const mediaUrl=getMediaUrl()||$player.currentSrc||$player.src;
 if(mediaUrl)autoSubtitlePlaybackStartedFor=mediaUrl;
 }
-const subtitleLanguageAliases={
-eng:'en',fre:'fr',fra:'fr',deu:'de',ger:'de',spa:'es',por:'pt',
-jpn:'ja',kor:'ko',zho:'zh',chi:'zh',ara:'ar',hin:'hi',ita:'it',
-nld:'nl',dut:'nl',pol:'pl',fas:'fa',per:'fa',heb:'he',tur:'tr',
-rus:'ru',ukr:'uk',swe:'sv',nor:'no',dan:'da',fin:'fi',ell:'el',
-gre:'el',ces:'cs',cze:'cs',ron:'ro',rum:'ro',hun:'hu',tha:'th',
-vie:'vi',ind:'id',msa:'ms',may:'ms'
-};
-const normalizeSubtitleLanguage=(code)=>{
-const tag=String(code||'').trim().toLowerCase().replace(/_/g,'-');
-if(!tag)return'';
-const parts=tag.split('-');
-parts[0]=subtitleLanguageAliases[parts[0]]||parts[0];
-return parts.join('-');
-};
-const subtitleFileIdentity=(url)=>{
-const clean=String(url).split('#')[0].split('?')[0];
-if(!isSubtitle(clean))return null;
-const withoutExt=clean.replace(/\.[^./]+$/,'');
-const langMatch=/^(.*)\.([a-z]{2,3}(?:[-_][a-z0-9]{2,8})?)$/i.exec(withoutExt);
-if(langMatch&&/^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})?$/i.test(langMatch[2])){
-return{base:langMatch[1],lang:langMatch[2]};
-}
-return{base:withoutExt,lang:''};
-};
-const preferredSubtitleLanguages=()=>{
-const codes=[];
-const push=(code)=>{
-const normalized=normalizeSubtitleLanguage(code);
-if(normalized&&!codes.includes(normalized))codes.push(normalized);
-};
-if(window.i18n&&window.i18n.locale)push(window.i18n.locale);
-const browserLanguages=navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language];
-browserLanguages.forEach(push);
-push('en');
-return codes;
-};
-const subtitleLanguageScore=(fileLang,preferred)=>{
-if(!fileLang)return 0;
-const file=normalizeSubtitleLanguage(fileLang);
-const filePrimary=file.split('-')[0];
-let best=0;
-preferred.forEach((lang,index)=>{
-const rank=file===lang?3:(filePrimary===lang.split('-')[0]?2:0);
-if(!rank)return;
-const score=rank*100-index;
-if(score>best)best=score;
+const getMatchingSubtitleUrl=(mediaUrl)=>mediaLanguage.matchSubtitle(mediaUrl,app.links&&app.links.files,{
+isSubtitle,
+isAudio
 });
-return best;
-};
-const getMatchingSubtitleUrl=(mediaUrl)=>{
-if(!mediaUrl||!Array.isArray(app.links.files))return null;
-if(isAudio(mediaUrl))return null;
-const mediaBase=stripUrlExtension(String(mediaUrl).split('#')[0].split('?')[0]);
-if(!mediaBase)return null;
-const preferred=preferredSubtitleLanguages();
-const matches=[];
-app.links.files.forEach((file)=>{
-if(!file||!file.url)return;
-const identity=subtitleFileIdentity(file.url);
-if(!identity||identity.base!==mediaBase)return;
-const clean=String(file.url).split('#')[0].split('?')[0].toLowerCase();
-matches.push({
-url:file.url,
-language:subtitleLanguageScore(identity.lang,preferred),
-untagged:identity.lang?0:1,
-vtt:clean.endsWith('.vtt')?1:0
-});
-});
-matches.sort((a,b)=>(b.language-a.language)||(b.untagged-a.untagged)||(b.vtt-a.vtt));
-return matches.length?matches[0].url:null;
-}
 const maybeAutoLoadSubtitles=()=>{
 if(!shouldAutoLoadMatchingSubtitles())return;
 const mediaUrl=getMediaUrl()||$player.currentSrc||$player.src;
@@ -8134,7 +8536,7 @@ setupWakeLock();
 const setupPrimaryControls=()=>{
 $('.btn-subtitles').on('click',()=>toggleModal($subtitles));
 $('.btn-audio').on('click',()=>{
-renderAudioPicker();
+audioSwitcher.render();
 toggleModal($audio);
 });
 $('.btn-fileinfo').on('click',()=>toggleModal($fileinfo));
@@ -8194,397 +8596,27 @@ $(checkbox).on('click',(e)=>e.stopImmediatePropagation());
 });
 $('.modal-background-overlay').on('click',()=>hideModals());
 }
-const audioPreferenceByFolder=new Map();
-const boundAudioTrackLists=new WeakSet();
-let applyingAudioTrack=false;
-let audioPreferenceAppliedFor='';
-let audioDiscoverToken=0;
-let audioRewriteGeneration=0;
-let discoveredAudioUrl='';
-let discoveredAudioTracks=[];
-let activeAudioBlobUrl='';
-const nativeAudioTracks=()=>{
-const list=$player&&$player.audioTracks;
-if(!list||!list.length)return[];
-const tracks=[];
-for(let i=0;i<list.length;i++){
-if(list[i])tracks.push(list[i]);
-}
-return tracks;
-};
-const audioMediaUrl=()=>{
-const url=getMediaUrl();
-if(discoveredAudioUrl&&activeAudioBlobUrl&&url===activeAudioBlobUrl)return discoveredAudioUrl;
-return url;
-};
-const getAudioTracks=()=>{
-const native=nativeAudioTracks();
-const discovered=discoveredAudioUrl&&discoveredAudioUrl===audioMediaUrl()?discoveredAudioTracks:[];
-return discovered.length>native.length?discovered:native;
-};
-const resetAudioDiscovery=()=>{
-audioDiscoverToken+=1;
-audioRewriteGeneration+=1;
-discoveredAudioTracks=[];
-discoveredAudioUrl='';
-audioPreferenceAppliedFor='';
-if(activeAudioBlobUrl){
-URL.revokeObjectURL(activeAudioBlobUrl);
-activeAudioBlobUrl='';
-}
-if($body)$body.addClass('no-audio-tracks');
-};
-const mp4Fourcc=(view,offset)=>String.fromCharCode(view.getUint8(offset),view.getUint8(offset+1),view.getUint8(offset+2),view.getUint8(offset+3));
-const readMp4Boxes=(view,start,end)=>{
-const boxes=[];
-let offset=start;
-while(offset+8<=end){
-let size=view.getUint32(offset);
-const type=mp4Fourcc(view,offset+4);
-let header=8;
-if(size===1){
-if(offset+16>end)return{boxes,partial:{start:offset}};
-size=Number(view.getBigUint64(offset+8));
-header=16;
-}else if(size===0){
-size=end-offset;
-}
-if(!Number.isFinite(size)||size<header)break;
-if(offset+size>end)return{boxes,partial:{type,start:offset,size,header}};
-boxes.push({type,start:offset,size,header,end:offset+size});
-offset+=size;
-}
-return{boxes,partial:null};
-};
-const findMp4Box=(view,box,type)=>{
-for(const child of readMp4Boxes(view,box.start+box.header,box.end).boxes){
-if(child.type===type)return child;
-const nested=findMp4Box(view,child,type);
-if(nested)return nested;
-}
-return null;
-};
-const mp4CString=(bytes,start,end)=>{
-let text='';
-for(let i=start;i<end&&bytes[i]!==0;i++)text+=String.fromCharCode(bytes[i]);
-try{return decodeURIComponent(escape(text));}catch(e){return text;}
-};
-const audioTracksInMp4=(bytes)=>{
-const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-const top=readMp4Boxes(view,0,bytes.length).boxes;
-const moov=top.find((box)=>box.type==='moov');
-if(!moov)return[];
-const tracks=[];
-readMp4Boxes(view,moov.start+moov.header,moov.end).boxes.forEach((box)=>{
-if(box.type!=='trak')return;
-const hdlr=findMp4Box(view,box,'hdlr');
-if(!hdlr||mp4Fourcc(view,hdlr.start+hdlr.header+8)!=='soun')return;
-const mdhd=findMp4Box(view,box,'mdhd');
-let language='';
-if(mdhd){
-const version=view.getUint8(mdhd.start+mdhd.header);
-const packed=view.getUint16(mdhd.start+mdhd.header+(version===1?32:20));
-language=String.fromCharCode(0x60+((packed>>10)&31),0x60+((packed>>5)&31),0x60+(packed&31));
-if(language==='und')language='';
-}
-const rawName=mp4CString(bytes,hdlr.start+hdlr.header+24,hdlr.end).trim();
-const label=rawName&&rawName!=='SoundHandler'?rawName:'';
-tracks.push({label,language:language?normalizeSubtitleLanguage(language):'',enabled:tracks.length===0});
-});
-return tracks;
-};
-const contentRangeTotal=(response)=>{
-const match=/\/(\d+)\s*$/.exec(response.headers.get('content-range')||'');
-return match?Number(match[1]):0;
-};
-const fetchByteRange=async(url,start,end)=>{
-const response=await fetch(url,{headers:{Range:`bytes=${start}-${end}`}});
-if(!response.ok)throw new Error(`Unable to read media (${response.status})`);
-const bytes=new Uint8Array(await response.arrayBuffer());
-const total=response.status===200?bytes.length:(contentRangeTotal(response)||bytes.length);
-return{bytes,total,whole:response.status===200||start===0&&bytes.length>=total};
-};
-const readMp4AudioTracks=async(url)=>{
-const first=await fetchByteRange(url,0,1048575);
-if(first.whole)return audioTracksInMp4(first.bytes);
-const view=new DataView(first.bytes.buffer,first.bytes.byteOffset,first.bytes.byteLength);
-const scanned=readMp4Boxes(view,0,first.bytes.length);
-const moov=scanned.boxes.find((box)=>box.type==='moov');
-if(moov)return audioTracksInMp4(first.bytes);
-const partial=scanned.partial;
-if(partial&&partial.type==='moov'&&partial.size){
-const exact=await fetchByteRange(url,partial.start,partial.start+partial.size-1);
-return audioTracksInMp4(exact.bytes);
-}
-const moovStart=partial&&partial.size?partial.start+partial.size:Math.max(0,first.total-1048576);
-if(moovStart>=first.total)return[];
-const rest=await fetchByteRange(url,moovStart,first.total-1);
-return audioTracksInMp4(rest.bytes);
-};
-const isolateMp4AudioTrack=(bytes,index)=>{
-const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-const top=readMp4Boxes(view,0,bytes.length).boxes;
-const moov=top.find((box)=>box.type==='moov');
-const mdat=top.find((box)=>box.type==='mdat');
-if(!moov||!mdat)return null;
-const children=readMp4Boxes(view,moov.start+moov.header,moov.end).boxes;
-const audio=children.filter((box)=>{
-if(box.type!=='trak')return false;
-const hdlr=findMp4Box(view,box,'hdlr');
-return hdlr&&mp4Fourcc(view,hdlr.start+hdlr.header+8)==='soun';
-});
-const keep=audio[index];
-if(!keep||audio.length<2)return null;
-const kept=[];
-let removed=0;
-children.forEach((box)=>{
-if(audio.includes(box)&&box!==keep)removed+=box.size;
-else kept.push(bytes.subarray(box.start,box.end));
-});
-const header=bytes.slice(moov.start,moov.start+moov.header);
-const headerView=new DataView(header.buffer,header.byteOffset,header.byteLength);
-if(moov.header===16)headerView.setBigUint64(8,BigInt(moov.size-removed));
-else headerView.setUint32(0,moov.size-removed);
-const parts=[];
-top.forEach((box)=>{
-if(box===moov)parts.push(header,...kept);
-else parts.push(bytes.subarray(box.start,box.end));
-});
-const out=new Uint8Array(parts.reduce((sum,part)=>sum+part.length,0));
-let cursor=0;
-parts.forEach((part)=>{
-out.set(part,cursor);
-cursor+=part.length;
-});
-const outView=new DataView(out.buffer);
-const newMdat=readMp4Boxes(outView,0,out.length).boxes.find((box)=>box.type==='mdat');
-const delta=newMdat?newMdat.start-mdat.start:0;
-if(delta){
-const walk=(start,end)=>{
-readMp4Boxes(outView,start,end).boxes.forEach((box)=>{
-if(box.type==='stco'||box.type==='co64'){
-const count=outView.getUint32(box.start+box.header+4);
-const wide=box.type==='co64';
-for(let i=0;i<count;i++){
-const pos=box.start+box.header+8+i*(wide?8:4);
-if(wide)outView.setBigUint64(pos,outView.getBigUint64(pos)+BigInt(delta));
-else outView.setUint32(pos,(outView.getUint32(pos)+delta)>>>0);
-}
-}else{
-walk(box.start+box.header,box.end);
-}
-});
-};
-walk(0,out.length);
-}
-return out;
-};
-const restorePlaybackPosition=(time,paused,rate)=>{
-const apply=()=>{
-if(Number.isFinite(time)&&time>0){
-try{$player.currentTime=time;}catch(e){}
-}
-if(Number.isFinite(rate)&&rate>0)$player.playbackRate=rate;
-if(!paused)$player.play().catch(()=>{});
-};
-if($player.readyState>=1)apply();
-else $player.addEventListener('loadedmetadata',apply,{once:true});
-};
-const useContainerAudioTrack=async(index)=>{
-const url=audioMediaUrl();
-const generation=++audioRewriteGeneration;
-const playable=await getPlayableUrlForMedia(url);
-if(generation!==audioRewriteGeneration||audioMediaUrl()!==url)return;
-const time=$player.currentTime||0;
-const paused=$player.paused;
-const rate=$player.playbackRate;
-if(index===0){
-if(activeAudioBlobUrl&&$player.src===activeAudioBlobUrl){
-URL.revokeObjectURL(activeAudioBlobUrl);
-activeAudioBlobUrl='';
-$player.src=playable;
-restorePlaybackPosition(time,paused,rate);
-}
-return;
-}
-const response=await fetch(playable);
-if(!response.ok)throw new Error(`Unable to read media (${response.status})`);
-const isolated=isolateMp4AudioTrack(new Uint8Array(await response.arrayBuffer()),index);
-if(!isolated||generation!==audioRewriteGeneration||audioMediaUrl()!==url)return;
-if(activeAudioBlobUrl)URL.revokeObjectURL(activeAudioBlobUrl);
-activeAudioBlobUrl=URL.createObjectURL(new Blob([isolated],{type:'video/mp4'}));
-$player.src=activeAudioBlobUrl;
-restorePlaybackPosition(time,paused,rate);
-};
-const audioFolderKey=(url=getMediaUrl())=>{
-const clean=String(url||'').split('#')[0].split('?')[0];
-const slash=clean.lastIndexOf('/');
-return slash>=0?clean.slice(0,slash+1):'';
-};
-const audioTrackLabel=(track,index)=>{
+const audioSwitcher=createAudioTrackSwitcher({
+player:$player,
+modal:$audio,
+body:$body,
+getMediaUrl,
+getPlayableUrl:getPlayableUrlForMedia,
+isAudio,
+isAudioMode:()=>$body.hasClass('is-audio'),
+trackLabel:(track,index)=>{
 const label=String(track.label||'').trim();
 const language=String(track.language||'').trim();
 if(label&&language&&label.toLowerCase()!==language.toLowerCase())return`${label} (${language})`;
 if(label)return label;
 if(language)return language;
 return t('ui.audio-track',{n:index+1});
-};
-const rememberAudioPreference=(track,index)=>{
-const folder=audioFolderKey();
-if(!folder)return;
-audioPreferenceByFolder.set(folder,{
-language:normalizeSubtitleLanguage(track.language||''),
-label:String(track.label||'').trim(),
-index
+},
+escapeHtml,
+closeButtonHtml:getModalCloseButtonHtml,
+closeModal:()=>hideModals(),
+setPressed:()=>setAriaPressed('.btn-audio',true)
 });
-};
-const setEnabledAudioTrack=(tracks,index)=>{
-const chosen=tracks[index];
-if(!chosen)return;
-applyingAudioTrack=true;
-try{
-chosen.enabled=true;
-tracks.forEach((track,i)=>{
-if(i!==index)track.enabled=false;
-});
-}catch(e){}
-applyingAudioTrack=false;
-};
-const matchingAudioTrackIndex=(tracks,preference)=>{
-let bestIndex=-1;
-let bestScore=0;
-tracks.forEach((track,index)=>{
-const language=normalizeSubtitleLanguage(track.language||'');
-const preferred=preference.language||'';
-let score=0;
-if(preferred&&language){
-if(language===preferred)score=3;
-else if(language.split('-')[0]===preferred.split('-')[0])score=2;
-}
-const label=String(track.label||'').trim();
-if(!score&&preference.label&&label===preference.label)score=1;
-if(score>bestScore){
-bestScore=score;
-bestIndex=index;
-}
-});
-if(bestIndex>=0)return bestIndex;
-if(!preference.language&&!preference.label&&Number.isInteger(preference.index)&&tracks[preference.index])return preference.index;
-return-1;
-};
-const applySavedAudioTrack=()=>{
-const folder=audioFolderKey();
-const preference=folder&&audioPreferenceByFolder.get(folder);
-const tracks=getAudioTracks();
-if(!preference||tracks.length<2)return false;
-const index=matchingAudioTrackIndex(tracks,preference);
-if(index<0)return false;
-const already=tracks[index].enabled&&tracks.every((track,i)=>track.enabled===(i===index));
-if(!already)setEnabledAudioTrack(tracks,index);
-return true;
-};
-const updateAudioPickerVisibility=()=>{
-const multiple=!$body.hasClass('is-audio')&&getAudioTracks().length>1;
-if(multiple)$body.removeClass('no-audio-tracks');
-else $body.addClass('no-audio-tracks');
-if(!multiple&&$audio&&$audio.hasClass('show'))hideModals();
-};
-const renderAudioPicker=()=>{
-if(!$audio)return;
-const tracks=getAudioTracks();
-const items=tracks.map((track,index)=>{
-const selected=track.enabled?' is-selected':'';
-const current=track.enabled?" aria-current='true'":'';
-return`<li class='audio-choice modal-item${selected}' tabindex='0' data-audio-index='${index}'${current}>${escapeHtml(audioTrackLabel(track,index))}</li>`;
-}).join('');
-$audio.html(`${getModalCloseButtonHtml()}${items}`);
-[...$audio.querySelectorAll('.audio-choice')].forEach((choice)=>{
-const activate=(e)=>{
-e.preventDefault();
-e.stopImmediatePropagation();
-selectAudioTrack(Number(choice.dataset.audioIndex));
-hideModals();
-};
-$(choice).on('click',activate);
-$(choice).on('keydown',(e)=>{
-if(e.key!=='Enter'&&e.key!==' ')return;
-activate(e);
-});
-});
-};
-const selectAudioTrack=(index)=>{
-const tracks=getAudioTracks();
-const track=tracks[index];
-if(!track)return;
-rememberAudioPreference(track,index);
-if(nativeAudioTracks().length>1)setEnabledAudioTrack(nativeAudioTracks(),index);
-else{
-setEnabledAudioTrack(tracks,index);
-useContainerAudioTrack(index).catch((error)=>console.warn('Unable to select audio track',error));
-}
-audioPreferenceAppliedFor=getMediaUrl();
-setAriaPressed('.btn-audio',true);
-};
-const discoverContainerAudioTracks=async(url)=>{
-if(activeAudioBlobUrl&&discoveredAudioTracks.length>1&&($player.src===activeAudioBlobUrl||$player.currentSrc===activeAudioBlobUrl)){
-updateAudioPickerVisibility();
-if($audio&&$audio.hasClass('show'))renderAudioPicker();
-return;
-}
-if(!url||url.startsWith('blob:')||isAudio(url)||nativeAudioTracks().length>1)return;
-if(activeAudioBlobUrl&&$player.currentSrc===activeAudioBlobUrl&&discoveredAudioUrl===url){
-updateAudioPickerVisibility();
-if($audio&&$audio.hasClass('show'))renderAudioPicker();
-return;
-}
-const token=++audioDiscoverToken;
-try{
-const playable=await getPlayableUrlForMedia(url);
-if(token!==audioDiscoverToken||audioMediaUrl()!==url)return;
-const tracks=await readMp4AudioTracks(playable);
-if(token!==audioDiscoverToken||audioMediaUrl()!==url||nativeAudioTracks().length>1)return;
-const preference=audioPreferenceByFolder.get(audioFolderKey(url));
-const match=preference&&tracks.length>1?matchingAudioTrackIndex(tracks,preference):-1;
-const selected=match>=0?match:0;
-discoveredAudioUrl=url;
-discoveredAudioTracks=tracks.map((track,index)=>({...track,enabled:index===selected}));
-updateAudioPickerVisibility();
-if($audio&&$audio.hasClass('show'))renderAudioPicker();
-if(selected>0)await useContainerAudioTrack(selected);
-}catch(error){
-if(token!==audioDiscoverToken)return;
-console.warn('Unable to read audio tracks',error);
-discoveredAudioTracks=[];
-discoveredAudioUrl=url;
-updateAudioPickerVisibility();
-}
-};
-const refreshAudioTracks=(opts={})=>{
-const list=$player&&$player.audioTracks;
-if(list&&typeof list.addEventListener==='function'&&!boundAudioTrackLists.has(list)){
-boundAudioTrackLists.add(list);
-list.addEventListener('addtrack',()=>refreshAudioTracks({applyPreference:true}));
-list.addEventListener('removetrack',()=>refreshAudioTracks());
-list.addEventListener('change',()=>{
-if(!applyingAudioTrack&&$audio&&$audio.hasClass('show'))renderAudioPicker();
-});
-}
-const url=audioMediaUrl();
-if(nativeAudioTracks().length>1){
-if(opts.applyPreference&&url&&audioPreferenceAppliedFor!==url){
-applySavedAudioTrack();
-audioPreferenceAppliedFor=url;
-}
-updateAudioPickerVisibility();
-if($audio&&$audio.hasClass('show'))renderAudioPicker();
-return;
-}
-if(opts.applyPreference&&url)discoverContainerAudioTracks(url);
-else{
-updateAudioPickerVisibility();
-if($audio&&$audio.hasClass('show'))renderAudioPicker();
-}
-};
 const setupPlayerEvents=()=>{
 $player.on('loadedmetadata',()=>{
 updateFileinfo();
@@ -8593,7 +8625,7 @@ applySubtitlePositionPreference();
 setTimeout(applySubtitlePositionPreference,0);
 updateMediaSessionMetadata();
 updateMediaSessionPositionState();
-refreshAudioTracks({applyPreference:true});
+audioSwitcher.refresh({applyPreference:true});
 });
 $player.on('loadeddata',syncTrickSrc);
 $player.on('timeupdate',throttle(()=>{
@@ -8736,7 +8768,7 @@ toggleModal($subtitles);
 break;
 case'a':
 if(!$body.hasClass('no-audio-tracks')&&!$body.hasClass('is-audio')){
-renderAudioPicker();
+audioSwitcher.render();
 toggleModal($audio);
 }
 break;
@@ -8843,7 +8875,7 @@ if(active&&typeof active.focus==='function')lastModalTrigger=active;
 setModalAccessibilityState($el,true);
 $el.addClass('show');
 if($el===$subtitles)updateSubtitleDurations();
-if($el===$audio)renderAudioPicker();
+if($el===$audio)audioSwitcher.render();
 if($el===$fileinfo)updateFileinfo({diagnostics:true});
 $el.once('click',hideModals);
 const $focus=getModalFirstFocusable($el);
@@ -9838,7 +9870,7 @@ bindFileinfoActionHandlers();
 const getBasicFileinfoMetadata=()=>{
 const url=getMediaUrl();
 const subtitles=($player.textTracks&&$player.textTracks.length?$player.textTracks.length:0);
-const listedAudioTracks=getAudioTracks().length;
+const listedAudioTracks=audioSwitcher.tracks().length;
 const audioTracks=listedAudioTracks||($player.audioTracks&&$player.audioTracks.length)||1;
 return{
 name:urlToFilename(url),
