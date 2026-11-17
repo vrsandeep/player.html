@@ -76,7 +76,7 @@ async function openPlayer(t, records = [], variant = 'player.html', settings = {
       return getAll.apply(this, args);
     };
   }, { records, origin });
-  const exports = 'window.__playerTest = { libraryState, hashState, settings, searchState, openLocation, refreshSearchIndex, registerLocalFolder, createLocalLinks, getLocalSession, localObjectUrls, localObjectUrlMetadata, getWatchHistoryRecords, getWatchHistoryId, getLocalFileHistoryId, sanitizeRestoredHash, requestFolderLinks, addFolderToPlaylist, setPlaylistFromUrls, playPlaylistIndex, getMediaUrl, renderLibraryView, putThumbnailCacheRecord, readThumbnailCache, applyThumbnailCacheItems, pruneThumbnailCache, runThumbnailCacheStore, idbRequest, getThumbnailCacheKey, populateThumbnails, writeWatchHistory, actionOpenLocalFileFallback }; Promise.resolve(window.__seedHistory).then(main);';
+  const exports = 'window.__playerTest = { libraryState, hashState, settings, searchState, openLocation, refreshSearchIndex, registerLocalFolder, createLocalLinks, getLocalSession, localObjectUrls, localObjectUrlMetadata, getWatchHistoryRecords, getWatchHistoryId, getLocalFileHistoryId, sanitizeRestoredHash, requestFolderLinks, addFolderToPlaylist, setPlaylistFromUrls, playPlaylistIndex, getMediaUrl, renderLibraryView, putThumbnailCacheRecord, readThumbnailCache, applyThumbnailCacheItems, pruneThumbnailCache, runThumbnailCacheStore, idbRequest, getThumbnailCacheKey, populateThumbnails, writeWatchHistory, actionOpenLocalFileFallback, getMatchingSubtitleUrl }; Promise.resolve(window.__seedHistory).then(main);';
   const html = fs.readFileSync(path.join(project, 'dist', variant), 'utf8').replace(/\bmain\(\);(?=\s*<\/script>)/, exports);
   assert.ok(html.includes('window.__playerTest ='), 'Test instrumentation must match the built app');
   await context.route('**/*', async route => {
@@ -939,6 +939,97 @@ test('unplayable looped queues stop after one failed pass and allow a manual ret
   await page.waitForFunction(() => app.playlistIndex === 1 && !window.__playerTest.getMediaUrl());
   assert.ok(mediaRequests.length > firstPass);
   assert.equal(await page.locator('body').evaluate(el => el.classList.contains('is-stopped')), true);
+});
+
+test('audio selector appears for a video file that contains several audio tracks', async t => {
+  const { page, context } = await openPlayer(t);
+  await context.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/media/multi-audio.mp4') {
+      return route.fulfill({ path: path.join(project, 'videos', 'multi-audio.mp4'), contentType: 'video/mp4' });
+    }
+    return route.fallback();
+  });
+  await page.evaluate((src) => {
+    const video = document.querySelector('.player');
+    video.src = src;
+    video.dispatchEvent(new Event('loadedmetadata'));
+  }, `${root}multi-audio.mp4`);
+  await page.waitForFunction(() => !document.body.classList.contains('no-audio-tracks'));
+  assert.equal(await page.locator('.btn-audio').isVisible(), true);
+  await page.locator('.btn-audio').click();
+  await page.waitForFunction(() => {
+    const item = document.querySelector('.audio-choice[data-audio-index="2"]');
+    return item && item.getBoundingClientRect().left >= 0;
+  });
+  assert.deepEqual(await page.locator('.audio-choice').allTextContents(), ['Big Buck Bunny (en)', 'Artest interview (es)', 'Lakers (ja)']);
+  await page.locator('.audio-choice[data-audio-index="2"]').click();
+  await page.waitForFunction(() => document.querySelector('.player').src.startsWith('blob:'));
+  assert.equal(await page.locator('.btn-audio').isVisible(), true);
+});
+
+test('audio picker appears for multiple tracks and keeps that choice in the folder', async t => {
+  const { page } = await openPlayer(t);
+  const useTracks = (src, tracks) => page.evaluate(({ src, tracks }) => {
+    const video = document.querySelector('.player');
+    video.src = src;
+    const list = tracks.map(track => ({ ...track }));
+    list.addEventListener = () => {};
+    Object.defineProperty(video, 'audioTracks', { configurable: true, get: () => list });
+    video.dispatchEvent(new Event('loadedmetadata'));
+    return {
+      hidden: document.body.classList.contains('no-audio-tracks'),
+      enabled: list.map(track => !!track.enabled)
+    };
+  }, { src, tracks });
+  const single = await useTracks(`${root}Episode 1.webm`, [{ label: 'English', language: 'en', enabled: true }]);
+  assert.equal(single.hidden, true);
+  const multiple = await useTracks(`${root}Episode 1.webm`, [
+    { label: 'English', language: 'en', enabled: true },
+    { label: 'Japanese', language: 'ja', enabled: false }
+  ]);
+  assert.equal(multiple.hidden, false);
+  assert.equal(await page.locator('.btn-audio').isVisible(), true);
+  await page.locator('.btn-audio').click();
+  await page.waitForFunction(() => {
+    const item = document.querySelector('.audio-choice[data-audio-index="1"]');
+    return item && item.getBoundingClientRect().left >= 0;
+  });
+  assert.deepEqual(await page.locator('.audio-choice').allTextContents(), ['English (en)', 'Japanese (ja)']);
+  await page.locator('.audio-choice[data-audio-index="1"]').click();
+  assert.deepEqual(await page.evaluate(() => [...document.querySelector('.player').audioTracks].map(track => track.enabled)), [false, true]);
+  const next = await useTracks(`${root}Episode 2.webm`, [
+    { label: 'English', language: 'en', enabled: true },
+    { label: '日本語', language: 'ja', enabled: false }
+  ]);
+  assert.deepEqual(next.enabled, [false, true]);
+  const otherFolder = await useTracks(`${origin}/elsewhere/Clip.webm`, [
+    { label: 'English', language: 'en', enabled: true },
+    { label: 'Japanese', language: 'ja', enabled: false }
+  ]);
+  assert.deepEqual(otherFolder.enabled, [true, false]);
+});
+
+test('auto-load matches the video filename and language-coded subtitle names', async t => {
+  const { page } = await openPlayer(t);
+  const media = `${root}Episode 1.mp4`;
+  const pick = (files, locale) => page.evaluate(({ media, files, locale }) => {
+    if (locale) window.i18n.setLanguage(locale);
+    window.app.links.files = files.map(url => ({ url }));
+    return window.__playerTest.getMatchingSubtitleUrl(media);
+  }, { media, files, locale });
+  const file = name => `${root}${name}`;
+  assert.equal(await pick([file('Episode 1.srt')]), file('Episode 1.srt'));
+  assert.equal(await pick([file('Episode 1.srt'), file('Episode 1.vtt')]), file('Episode 1.vtt'));
+  assert.equal(await pick([file('Episode 1.SRT')]), file('Episode 1.SRT'));
+  assert.equal(await pick([file('Episode 1.en.srt'), file('Other.srt')]), file('Episode 1.en.srt'));
+  assert.equal(await pick([file('Episode 1.eng.vtt'), file('Episode 1.fr.srt')]), file('Episode 1.eng.vtt'));
+  assert.equal(await pick([file('Episode 1.ja.srt'), file('Episode 1.srt')], 'ja'), file('Episode 1.ja.srt'));
+  assert.equal(await pick([file('Episode 1.ja.srt'), file('Episode 1.srt')], 'fr'), file('Episode 1.srt'));
+  assert.equal(await pick([file('Episode 1.zh-Hans.vtt'), file('Episode 1.zh.srt'), file('Episode 1.en.srt')], 'zh-Hans'), file('Episode 1.zh-Hans.vtt'));
+  assert.equal(await pick([file('Episode 1.extra.srt')]), null);
+  assert.equal(await pick([file('Episode 1.en.srt?download=1')]), file('Episode 1.en.srt?download=1'));
+  assert.equal(await page.evaluate(url => window.__playerTest.getMatchingSubtitleUrl(url), `${root}Audio track.mp3`), null);
 });
 
 test('transport controls sit below the picture on a narrow screen and over it on a wide one', async t => {

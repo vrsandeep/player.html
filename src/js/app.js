@@ -9,6 +9,7 @@
     const $help = $('.help');
     const $settings = $('.settings');
     const $subtitles = $('.subtitle-selection');
+    const $audio = $('.audio-selection');
     const $playlist = $('.playlist');
     const $openUrl = $('.open-url');
     const $currentTimestamp = $('.current-timestamp');
@@ -3380,6 +3381,7 @@
 
       if (getMediaUrl()) writeWatchHistory('mediachange');
       resetPlayer();
+      audioSwitcher.reset();
 
       // Being playback if there is a URL
       if (!!url) {
@@ -3890,19 +3892,10 @@
       if (mediaUrl) autoSubtitlePlaybackStartedFor = mediaUrl;
     }
 
-    const getMatchingSubtitleUrl = (mediaUrl) => {
-      if (!mediaUrl || !Array.isArray(app.links.files)) return null;
-      if (isAudio(mediaUrl)) return null;
-      const mediaBase = stripUrlExtension(mediaUrl);
-      if (!mediaBase) return null;
-
-      const candidates = app.links.files.filter((file) => file && file.url && isSubtitle(file.url));
-      const matches = candidates.filter((file) => stripUrlExtension(file.url) === mediaBase);
-      if (!matches.length) return null;
-
-      const vtt = matches.find((file) => file.url && file.url.toLowerCase().endsWith('.vtt'));
-      return (vtt || matches[0]).url;
-    }
+    const getMatchingSubtitleUrl = (mediaUrl) => mediaLanguage.matchSubtitle(mediaUrl, app.links && app.links.files, {
+      isSubtitle,
+      isAudio
+    });
 
     const maybeAutoLoadSubtitles = () => {
       if (!shouldAutoLoadMatchingSubtitles()) return;
@@ -4259,11 +4252,14 @@
       if (opts.updateHash) updateHash();
     }
 
-    const isSubtitle = (url) => url.toString().endsWith('.vtt') || url.toString().endsWith('.srt');
+    const isSubtitle = (url) => {
+      const clean = String(url || '').split('#')[0].split('?')[0].toLowerCase();
+      return clean.endsWith('.vtt') || clean.endsWith('.srt');
+    };
 
     const isSRT = (url) => {
       try {
-        return url.endsWith('.srt');
+        return String(url).split('#')[0].split('?')[0].toLowerCase().endsWith('.srt');
       } catch (e) {
         return false;
       }
@@ -5030,6 +5026,10 @@
 
     const setupPrimaryControls = () => {
       $('.btn-subtitles').on('click', () => toggleModal($subtitles));
+      $('.btn-audio').on('click', () => {
+        audioSwitcher.render();
+        toggleModal($audio);
+      });
       $('.btn-fileinfo').on('click', () => toggleModal($fileinfo));
       $('.btn-playlist').on('click', () => toggleModal($playlist));
       $('.btn-settings').on('click', () => toggleModal($settings));
@@ -5095,6 +5095,29 @@
       $('.modal-background-overlay').on('click', () => hideModals());
     }
 
+    const audioSwitcher = createAudioTrackSwitcher({
+      player: $player,
+      modal: $audio,
+      body: $body,
+      getMediaUrl,
+      getPlayableUrl: getPlayableUrlForMedia,
+      isAudio,
+      isAudioMode: () => $body.hasClass('is-audio'),
+      trackLabel: (track, index) => {
+        const label = String(track.label || '').trim();
+        const language = String(track.language || '').trim();
+        if (label && language && label.toLowerCase() !== language.toLowerCase()) return `${label} (${language})`;
+        if (label) return label;
+        if (language) return language;
+        return t('ui.audio-track', { n: index + 1 });
+      },
+      escapeHtml,
+      closeButtonHtml: getModalCloseButtonHtml,
+      closeModal: () => hideModals(),
+      setPressed: () => setAriaPressed('.btn-audio', true)
+    });
+
+
     const setupPlayerEvents = () => {
       $player.on('loadedmetadata', () => {
         updateFileinfo();
@@ -5103,6 +5126,7 @@
         setTimeout(applySubtitlePositionPreference, 0);
         updateMediaSessionMetadata();
         updateMediaSessionPositionState();
+        audioSwitcher.refresh({ applyPreference: true });
       });
       $player.on('loadeddata', syncTrickSrc);
       $player.on('timeupdate', throttle(() => {
@@ -5248,6 +5272,12 @@
         case 's':
           toggleModal($subtitles);
           break;
+        case 'a':
+          if (!$body.hasClass('no-audio-tracks') && !$body.hasClass('is-audio')) {
+            audioSwitcher.render();
+            toggleModal($audio);
+          }
+          break;
         case 'S':
           e.preventDefault();
           actionCaptureScreenshot();
@@ -5360,6 +5390,7 @@
       setModalAccessibilityState($el, true);
       $el.addClass('show');
       if ($el === $subtitles) updateSubtitleDurations();
+      if ($el === $audio) audioSwitcher.render();
       if ($el === $fileinfo) updateFileinfo({ diagnostics: true });
       $el.once('click', hideModals);
       const $focus = getModalFirstFocusable($el);
@@ -6418,7 +6449,8 @@
     const getBasicFileinfoMetadata = () => {
       const url = getMediaUrl();
       const subtitles =   ($player.textTracks  && $player.textTracks.length  ? $player.textTracks.length  : 0);
-      const audioTracks = ($player.audioTracks && $player.audioTracks.length ? $player.audioTracks.length : 1);
+      const listedAudioTracks = audioSwitcher.tracks().length;
+      const audioTracks = listedAudioTracks || ($player.audioTracks && $player.audioTracks.length) || 1;
 
       return {
         name: urlToFilename(url),
