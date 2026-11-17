@@ -5,7 +5,8 @@
 
 .settings.modal,
 .fileinfo.modal,
-.subtitle-selection.modal {
+.subtitle-selection.modal,
+.audio-selection.modal {
   position: fixed;
   top: 0;
   inset-inline-start: 0;
@@ -13,7 +14,8 @@
 
 .settings.show ~ .modal-background-overlay,
 .fileinfo.show ~ .modal-background-overlay,
-.subtitle-selection.show ~ .modal-background-overlay {
+.subtitle-selection.show ~ .modal-background-overlay,
+.audio-selection.show ~ .modal-background-overlay {
   position: fixed;
   inset: 0;
   width: auto;

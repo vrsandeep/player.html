@@ -1181,6 +1181,11 @@
       filter: none;
     }
     .is-audio .btn-subtitles         { display: none !important; }
+    .no-audio-tracks .btn-audio,
+    .is-audio .btn-audio             { display: none !important; }
+    .audio-choice.is-selected {
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+    }
     .controls button:has(svg) {
       color: var(--control-fg);
       background-color: transparent;
@@ -2171,21 +2176,75 @@
           "secondary-controls settings-controls";
         grid-template-rows: min-content min-content min-content min-content;
         grid-template-columns: minmax(0, 1fr) auto;
+        padding-inline: 0.45rem;
       }
 
-      .controls-sources   { justify-content: flex-start; gap: 0.75rem; }
-      .controls-settings  { justify-content: flex-end; gap: 0.75rem; }
-      .primary-buttons    { justify-content: space-between; }
-      .progress-bar       { margin-bottom: 1rem; }
+      .controls button {
+        width: 2.35rem;
+        height: 2.35rem;
+      }
+
+      .controls button svg {
+        width: 1.55rem;
+        height: 1.55rem;
+        min-width: 1.55rem;
+        min-height: 1.55rem;
+        max-width: 1.55rem;
+        max-height: 1.55rem;
+      }
+
+      .controls-sources   { justify-content: flex-start; gap: 0.35rem; }
+      .controls-settings  { justify-content: flex-end; gap: 0.35rem; }
+      .primary-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 0.15rem 0.05rem;
+        width: 100%;
+      }
+      .primary-buttons > .btn-previous { order: 1; }
+      .primary-buttons > .btn-rewind { order: 2; }
+      .primary-buttons > .btn-play-pause {
+        order: 3;
+        width: 2.9rem;
+        height: 2.9rem;
+      }
+      .primary-buttons > .btn-play-pause svg {
+        width: 1.85rem;
+        height: 1.85rem;
+        min-width: 1.85rem;
+        min-height: 1.85rem;
+        max-width: 1.85rem;
+        max-height: 1.85rem;
+      }
+      .primary-buttons > .btn-fast-forward { order: 4; }
+      .primary-buttons > .btn-next { order: 5; }
+      .primary-buttons::after {
+        content: "";
+        order: 6;
+        flex-basis: 100%;
+        height: 0;
+      }
+      .primary-buttons > .btn-stop { order: 7; }
+      .primary-buttons > .btn-loop { order: 8; }
+      .primary-buttons > .volume-control { order: 9; }
+      .primary-buttons > .btn-playback-rate { order: 10; }
+      .primary-buttons > .btn-fullscreen { order: 11; }
+      .primary-buttons > .btn-pip { order: 12; }
+      .primary-buttons > .btn-audio { order: 13; }
+      .primary-buttons > .btn-subtitles { order: 14; }
+      .volume-bar { width: 3rem; }
+      .progress-bar       { margin-bottom: 0.65rem; }
       .trick-container    { display: none; }
     }
 
-    @media (max-width: 480px) {
-      .primary-buttons {
-        flex-wrap: wrap;
-        justify-content: space-between;
-        gap: 0.35rem;
+    @media (max-width: 380px) {
+      .controls button {
+        width: 2.15rem;
+        height: 2.15rem;
       }
+      .volume-bar { width: 2.35rem; }
     }
 
     @media (prefers-color-scheme: light) {
