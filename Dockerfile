@@ -22,7 +22,7 @@ COPY build.py ./
 COPY src ./src
 RUN python build.py ${VERSION:+--version "$VERSION"}
 
-FROM nginx:1.31-alpine
+FROM nginx:1.31.9-alpine
 
 RUN apk add --no-cache openssl
 
